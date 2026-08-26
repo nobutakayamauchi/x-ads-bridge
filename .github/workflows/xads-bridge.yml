@@ -1,0 +1,59 @@
+name: X Ads Bridge
+
+on:
+  issues:
+    types: [opened, reopened]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: xads-issue-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  execute:
+    if: >-
+      github.event.issue.user.login == github.repository_owner &&
+      startsWith(github.event.issue.title, '[xads]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Execute bridge command
+        id: bridge
+        continue-on-error: true
+        env:
+          XADS_CONSUMER_KEY: ${{ secrets.XADS_CONSUMER_KEY }}
+          XADS_CONSUMER_SECRET: ${{ secrets.XADS_CONSUMER_SECRET }}
+          XADS_ACCESS_TOKEN: ${{ secrets.XADS_ACCESS_TOKEN }}
+          XADS_ACCESS_TOKEN_SECRET: ${{ secrets.XADS_ACCESS_TOKEN_SECRET }}
+          XADS_ACCOUNT_ID: ${{ secrets.XADS_ACCOUNT_ID }}
+          XADS_ALLOW_WRITES: ${{ secrets.XADS_ALLOW_WRITES }}
+          XADS_MAX_DAILY_BUDGET_LOCAL: ${{ secrets.XADS_MAX_DAILY_BUDGET_LOCAL }}
+          XADS_API_VERSION: '12'
+        run: python issue_runner.py
+
+      - name: Post result to issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: gh issue comment "$ISSUE_NUMBER" --body-file result.md
+
+      - name: Mark workflow failed when bridge failed
+        if: steps.bridge.outcome == 'failure'
+        run: exit 1
