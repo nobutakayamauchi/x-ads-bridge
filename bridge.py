@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 from decimal import Decimal, InvalidOperation
@@ -19,7 +20,14 @@ WRITE_COMMANDS = {
     "pause_line_item",
     "resume_line_item",
 }
+FORMAL_APPROVAL_REQUEST = "正式承認文出してください"
 APPROVAL_CODE_LENGTH = 16
+PROPOSAL_ID_LENGTH = 12
+CONTROL_FIELDS = {
+    "approval_token",
+    "approval_text",
+    "user_approved",
+}
 
 
 class BridgeError(RuntimeError):
@@ -76,21 +84,27 @@ def _writes_enabled() -> bool:
 
 
 def _approval_payload(command: dict[str, Any]) -> dict[str, Any]:
-    return {
-        key: value
-        for key, value in command.items()
-        if key not in {"user_approved", "approval_id", "approval_text"}
-    }
+    return {key: value for key, value in command.items() if key not in CONTROL_FIELDS}
 
 
-def _approval_id(command: dict[str, Any]) -> str:
-    canonical = json.dumps(
+def _canonical_payload(command: dict[str, Any]) -> str:
+    return json.dumps(
         _approval_payload(command),
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
     )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:APPROVAL_CODE_LENGTH]
+
+
+def _proposal_id(command: dict[str, Any]) -> str:
+    return hashlib.sha256(_canonical_payload(command).encode("utf-8")).hexdigest()[:PROPOSAL_ID_LENGTH]
+
+
+def _approval_token(command: dict[str, Any]) -> str:
+    # Domain-separated HMAC: changing the X access-token secret invalidates old approvals automatically.
+    signing_key = _required_env("XADS_ACCESS_TOKEN_SECRET").encode("utf-8")
+    message = ("xads-formal-approval-v1|" + _canonical_payload(command)).encode("utf-8")
+    return hmac.new(signing_key, message, hashlib.sha256).hexdigest()[:APPROVAL_CODE_LENGTH]
 
 
 def _budget_display(command: dict[str, Any]) -> str:
@@ -122,10 +136,45 @@ def _approval_description(command: dict[str, Any]) -> str:
     return name
 
 
-def _required_approval_text(command: dict[str, Any]) -> str:
-    approval_id = _approval_id(command)
+def _formal_approval_text(command: dict[str, Any]) -> str:
+    token = _approval_token(command)
     description = _approval_description(command)
-    return f"承認コード {approval_id}：{description}を承認します"
+    return f"正式承認コード {token}：{description}を承認します"
+
+
+def _issue_formal_approval(command: dict[str, Any]) -> dict[str, Any]:
+    proposed = command.get("proposed_command")
+    if not isinstance(proposed, dict):
+        raise BridgeError("formal approval blocked: proposed_command must be an object")
+    action = str(proposed.get("action") or "").strip()
+    if action not in WRITE_COMMANDS:
+        raise BridgeError("formal approval blocked: proposed_command is not a supported write action")
+
+    request_text = command.get("approval_request_text")
+    if request_text != FORMAL_APPROVAL_REQUEST:
+        raise BridgeError(
+            f"formal approval blocked: approval_request_text must exactly equal '{FORMAL_APPROVAL_REQUEST}'"
+        )
+    if command.get("da_counter_da_review_complete") is not True:
+        raise BridgeError("formal approval blocked: DA/counter-DA review must be marked complete")
+
+    token = _approval_token(proposed)
+    return {
+        "ok": True,
+        "mode": "formal_approval_issued",
+        "write_executed": False,
+        "proposal_id": _proposal_id(proposed),
+        "approval_token": token,
+        "approval_code_length": APPROVAL_CODE_LENGTH,
+        "formal_approval_text": _formal_approval_text(proposed),
+        "approval_text_must_match_exactly": True,
+        "proposed_command": _approval_payload(proposed),
+        "master_write_switch_enabled": _writes_enabled(),
+        "instruction": (
+            "Show the formal approval text to the user only now. Execute nothing until the user "
+            "copies and returns that exact sentence character-for-character."
+        ),
+    }
 
 
 def _write_gate(command: dict[str, Any]) -> dict[str, Any] | None:
@@ -133,53 +182,51 @@ def _write_gate(command: dict[str, Any]) -> dict[str, Any] | None:
     if name not in WRITE_COMMANDS:
         return None
 
-    expected_approval_id = _approval_id(command)
-    expected_approval_text = _required_approval_text(command)
-    supplied_approval_id = command.get("approval_id")
-    supplied_approval_text = command.get("approval_text")
+    supplied_token = command.get("approval_token")
+    supplied_text = command.get("approval_text")
 
-    # No approval fields means proposal-only mode. No write is attempted.
-    if supplied_approval_id is None and supplied_approval_text is None:
+    # Initial proposal stage: no executable approval data is exposed here.
+    if supplied_token is None and supplied_text is None:
         return {
             "ok": True,
             "mode": "proposal",
             "write_executed": False,
             "requires_user_approval": True,
             "requires_da_counter_da_review": True,
-            "approval_id": expected_approval_id,
-            "approval_code_length": APPROVAL_CODE_LENGTH,
-            "required_approval_text": expected_approval_text,
-            "approval_text_must_match_exactly": True,
+            "formal_approval_text_issued": False,
+            "proposal_id": _proposal_id(command),
             "proposed_command": _approval_payload(command),
             "master_write_switch_enabled": _writes_enabled(),
-            "instruction": (
-                "Analyze the proposal, including DA and counter-DA when there are operational, "
-                "budget, targeting, duration, or other risk concerns. Do not execute unless the user "
-                "returns the required approval text exactly, character-for-character."
+            "next_step": (
+                f"After DA/counter-DA review and only if the user explicitly says '{FORMAL_APPROVAL_REQUEST}', "
+                "request formal approval issuance."
             ),
         }
 
-    if not isinstance(supplied_approval_id, str):
-        raise BridgeError("approved write blocked: approval_id must be a string")
-    if len(supplied_approval_id) != APPROVAL_CODE_LENGTH:
+    if command.get("user_approved") is not True:
+        raise BridgeError("approved write blocked: user_approved must be true")
+    if not isinstance(supplied_token, str):
+        raise BridgeError("approved write blocked: approval_token is required")
+    if len(supplied_token) != APPROVAL_CODE_LENGTH:
         raise BridgeError(
-            f"approved write blocked: approval_id must be exactly {APPROVAL_CODE_LENGTH} characters"
+            f"approved write blocked: approval_token must be exactly {APPROVAL_CODE_LENGTH} characters"
         )
-    if supplied_approval_id != expected_approval_id:
-        raise BridgeError("approved write blocked: approval_id mismatch; request a fresh proposal")
 
-    if not isinstance(supplied_approval_text, str):
+    expected_token = _approval_token(command)
+    if not hmac.compare_digest(supplied_token, expected_token):
+        raise BridgeError("approved write blocked: approval_token mismatch; request a fresh formal approval")
+
+    if not isinstance(supplied_text, str):
         raise BridgeError("approved write blocked: approval_text is required")
-    # Intentionally no trimming or normalization: any extra/missing character fails.
-    if supplied_approval_text != expected_approval_text:
+    expected_text = _formal_approval_text(command)
+    # No trimming or normalization: one wrong, missing, or extra character blocks execution.
+    if supplied_text != expected_text:
         raise BridgeError(
-            "approved write blocked: approval_text mismatch; exact character-for-character approval is required"
+            "approved write blocked: formal approval sentence mismatch; exact character-for-character approval is required"
         )
 
     if not _writes_enabled():
-        raise BridgeError(
-            "approved write blocked: master switch XADS_ALLOW_WRITES is not true"
-        )
+        raise BridgeError("approved write blocked: master switch XADS_ALLOW_WRITES is not true")
     return None
 
 
@@ -224,9 +271,14 @@ def execute(command: dict[str, Any]) -> dict[str, Any]:
             "api_version": API_VERSION,
             "writes_enabled": _writes_enabled(),
             "per_write_user_approval": True,
+            "formal_approval_request_required": True,
+            "formal_approval_request_text": FORMAL_APPROVAL_REQUEST,
             "exact_approval_text_required": True,
             "approval_code_length": APPROVAL_CODE_LENGTH,
         }
+
+    if name == "issue_write_approval":
+        return _issue_formal_approval(command)
 
     proposal = _write_gate(command)
     if proposal is not None:
