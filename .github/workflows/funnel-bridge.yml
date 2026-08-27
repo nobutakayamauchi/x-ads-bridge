@@ -37,7 +37,8 @@ jobs:
         id: bridge
         continue-on-error: true
         env:
-          FUNNEL_API_BASE_URL: ${{ secrets.FUNNEL_API_BASE_URL }}
+          # Public routing is configuration, not a secret. Keep only the bearer token in Actions Secrets.
+          FUNNEL_API_BASE_URL: https://webai.140-238-62-74.sslip.io/funnel
           FUNNEL_AUDIT_TOKEN: ${{ secrets.FUNNEL_AUDIT_TOKEN }}
         run: python funnel_issue_runner.py
 
