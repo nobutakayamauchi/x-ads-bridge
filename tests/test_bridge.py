@@ -35,30 +35,35 @@ class ApprovalProtocolTests(unittest.TestCase):
         self.assertFalse(result["write_executed"])
         self.assertFalse(result["formal_approval_text_issued"])
         self.assertEqual(len(result["proposal_token"]), bridge.TOKEN_LENGTH)
+        self.assertGreater(result["proposal_expires_at"], bridge._now_epoch())
         return command, result
 
-    def _formal(self, proposed, proposal_token):
+    def _formal(self, proposed, proposal):
         result = bridge.execute(
             {
                 "action": "issue_write_approval",
                 "approval_request_text": bridge.FORMAL_APPROVAL_REQUEST,
                 "da_counter_da_review_complete": True,
-                "proposal_token": proposal_token,
+                "proposal_token": proposal["proposal_token"],
+                "proposal_expires_at": proposal["proposal_expires_at"],
                 "proposed_command": proposed,
             }
         )
         self.assertEqual(result["mode"], "formal_approval_issued")
         self.assertFalse(result["write_executed"])
         self.assertTrue(result["proposal_token_verified"])
-        self.assertEqual(result["proposal_token"], proposal_token)
+        self.assertEqual(result["proposal_token"], proposal["proposal_token"])
         self.assertEqual(len(result["approval_token"]), bridge.TOKEN_LENGTH)
+        self.assertGreater(result["approval_expires_at"], bridge._now_epoch())
         return result
 
     def _execution_command(self, proposed, proposal, formal):
         return {
             **proposed,
             "proposal_token": proposal["proposal_token"],
+            "proposal_expires_at": proposal["proposal_expires_at"],
             "approval_token": formal["approval_token"],
+            "approval_expires_at": formal["approval_expires_at"],
             "approval_text": formal["formal_approval_text"],
             "user_approved": True,
         }
@@ -77,6 +82,7 @@ class ApprovalProtocolTests(unittest.TestCase):
                     "approval_request_text": "正式承認文出して",
                     "da_counter_da_review_complete": True,
                     "proposal_token": proposal["proposal_token"],
+                    "proposal_expires_at": proposal["proposal_expires_at"],
                     "proposed_command": proposed,
                 }
             )
@@ -90,34 +96,55 @@ class ApprovalProtocolTests(unittest.TestCase):
                     "approval_request_text": bridge.FORMAL_APPROVAL_REQUEST,
                     "da_counter_da_review_complete": False,
                     "proposal_token": proposal["proposal_token"],
+                    "proposal_expires_at": proposal["proposal_expires_at"],
                     "proposed_command": proposed,
                 }
             )
+
+    def test_expired_proposal_cannot_issue_formal_approval(self):
+        proposed, proposal = self._proposal()
+        future = proposal["proposal_expires_at"] + 1
+        with patch.object(bridge, "_now_epoch", return_value=future):
+            with self.assertRaisesRegex(bridge.BridgeError, "expired"):
+                self._formal(proposed, proposal)
 
     def test_proposal_token_is_bound_to_exact_command(self):
         proposed, proposal = self._proposal()
         tampered = {**proposed, "line_item_id": "line-item-2"}
         with self.assertRaisesRegex(bridge.BridgeError, "proposal_token"):
-            self._formal(tampered, proposal["proposal_token"])
+            self._formal(tampered, proposal)
 
     def test_approval_token_is_bound_to_proposal_token(self):
         proposed, proposal_a = self._proposal()
         _, proposal_b = self._proposal()
-        formal = self._formal(proposed, proposal_a["proposal_token"])
+        formal = self._formal(proposed, proposal_a)
 
         execution = {
             **proposed,
             "proposal_token": proposal_b["proposal_token"],
+            "proposal_expires_at": proposal_b["proposal_expires_at"],
             "approval_token": formal["approval_token"],
+            "approval_expires_at": formal["approval_expires_at"],
             "approval_text": formal["formal_approval_text"],
             "user_approved": True,
         }
         with self.assertRaisesRegex(bridge.BridgeError, "approval_token"):
             bridge.execute(execution)
 
+    def test_expired_formal_approval_blocks_execution(self):
+        proposed, proposal = self._proposal()
+        formal = self._formal(proposed, proposal)
+        execution = self._execution_command(proposed, proposal, formal)
+        future = formal["approval_expires_at"] + 1
+
+        with patch.object(bridge, "_now_epoch", return_value=future):
+            with patch.dict(os.environ, {"XADS_ALLOW_WRITES": "true"}, clear=False):
+                with self.assertRaisesRegex(bridge.BridgeError, "expired"):
+                    bridge.execute(execution)
+
     def test_one_character_approval_text_difference_blocks(self):
         proposed, proposal = self._proposal()
-        formal = self._formal(proposed, proposal["proposal_token"])
+        formal = self._formal(proposed, proposal)
         execution = self._execution_command(proposed, proposal, formal)
         execution["approval_text"] += "。"
 
@@ -126,7 +153,7 @@ class ApprovalProtocolTests(unittest.TestCase):
 
     def test_master_switch_blocks_valid_approval(self):
         proposed, proposal = self._proposal()
-        formal = self._formal(proposed, proposal["proposal_token"])
+        formal = self._formal(proposed, proposal)
         execution = self._execution_command(proposed, proposal, formal)
 
         with self.assertRaisesRegex(bridge.BridgeError, "XADS_ALLOW_WRITES"):
@@ -134,7 +161,7 @@ class ApprovalProtocolTests(unittest.TestCase):
 
     def test_reopened_issue_blocks_valid_approval(self):
         proposed, proposal = self._proposal()
-        formal = self._formal(proposed, proposal["proposal_token"])
+        formal = self._formal(proposed, proposal)
         execution = self._execution_command(proposed, proposal, formal)
 
         with patch.dict(
@@ -147,7 +174,7 @@ class ApprovalProtocolTests(unittest.TestCase):
 
     def test_wrong_account_blocks_valid_approval(self):
         proposed, proposal = self._proposal(account_id="different-account")
-        formal = self._formal(proposed, proposal["proposal_token"])
+        formal = self._formal(proposed, proposal)
         execution = self._execution_command(proposed, proposal, formal)
 
         with patch.dict(os.environ, {"XADS_ALLOW_WRITES": "true"}, clear=False):
@@ -156,7 +183,7 @@ class ApprovalProtocolTests(unittest.TestCase):
 
     def test_valid_opened_approval_can_reach_write_request(self):
         proposed, proposal = self._proposal()
-        formal = self._formal(proposed, proposal["proposal_token"])
+        formal = self._formal(proposed, proposal)
         execution = self._execution_command(proposed, proposal, formal)
 
         with patch.dict(os.environ, {"XADS_ALLOW_WRITES": "true"}, clear=False):
@@ -178,7 +205,7 @@ class ApprovalProtocolTests(unittest.TestCase):
             "amount_local": 1700,
         }
         proposal = bridge.execute(proposed)
-        formal = self._formal(proposed, proposal["proposal_token"])
+        formal = self._formal(proposed, proposal)
         execution = self._execution_command(proposed, proposal, formal)
 
         with patch.dict(os.environ, {"XADS_ALLOW_WRITES": "true"}, clear=False):
@@ -199,7 +226,7 @@ class ApprovalProtocolTests(unittest.TestCase):
             "amount_local": 2500,
         }
         proposal = bridge.execute(proposed)
-        formal = self._formal(proposed, proposal["proposal_token"])
+        formal = self._formal(proposed, proposal)
         execution = self._execution_command(proposed, proposal, formal)
 
         with patch.dict(os.environ, {"XADS_ALLOW_WRITES": "true"}, clear=False):
