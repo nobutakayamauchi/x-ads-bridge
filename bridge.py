@@ -5,6 +5,7 @@ import hmac
 import json
 import os
 import secrets
+import time
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -27,9 +28,13 @@ WRITE_COMMANDS = {
 FORMAL_APPROVAL_REQUEST = "正式承認文出してください"
 TOKEN_LENGTH = 16
 TOKEN_NONCE_LENGTH = 6
+PROPOSAL_TTL_SECONDS = int(os.getenv("XADS_PROPOSAL_TTL_SECONDS", "3600"))
+APPROVAL_TTL_SECONDS = int(os.getenv("XADS_APPROVAL_TTL_SECONDS", "900"))
 CONTROL_FIELDS = {
     "proposal_token",
+    "proposal_expires_at",
     "approval_token",
+    "approval_expires_at",
     "approval_text",
     "user_approved",
 }
@@ -114,15 +119,33 @@ def _signing_key() -> bytes:
     return _required_env("XADS_ACCESS_TOKEN_SECRET").encode("utf-8")
 
 
+def _now_epoch() -> int:
+    return int(time.time())
+
+
+def _expiry(value: object, field_name: str) -> int:
+    if isinstance(value, bool):
+        raise BridgeError(f"{field_name} must be an integer epoch timestamp")
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise BridgeError(f"{field_name} must be an integer epoch timestamp") from exc
+    if parsed <= 0:
+        raise BridgeError(f"{field_name} must be greater than zero")
+    return parsed
+
+
 def _token_signature(
     kind: str,
     command: dict[str, Any],
     nonce: str,
     *,
+    expires_at: int,
     parent_token: str = "",
 ) -> str:
     message = (
-        f"xads-{kind}-v3|{nonce}|{parent_token}|{_canonical_payload(command)}"
+        f"xads-{kind}-v4|{nonce}|{expires_at}|{parent_token}|"
+        f"{_canonical_payload(command)}"
     ).encode("utf-8")
     digest = hmac.new(_signing_key(), message, hashlib.sha256).hexdigest()
     return digest[: TOKEN_LENGTH - TOKEN_NONCE_LENGTH]
@@ -132,6 +155,7 @@ def _new_signed_token(
     kind: str,
     command: dict[str, Any],
     *,
+    expires_at: int,
     parent_token: str = "",
 ) -> str:
     nonce = secrets.token_hex(TOKEN_NONCE_LENGTH // 2)
@@ -139,6 +163,7 @@ def _new_signed_token(
         kind,
         command,
         nonce,
+        expires_at=expires_at,
         parent_token=parent_token,
     )
 
@@ -148,7 +173,9 @@ def _verify_signed_token(
     kind: str,
     command: dict[str, Any],
     *,
+    expires_at: object,
     parent_token: str = "",
+    enforce_expiry: bool = True,
 ) -> bool:
     if not isinstance(token, str) or len(token) != TOKEN_LENGTH:
         return False
@@ -156,11 +183,18 @@ def _verify_signed_token(
         int(token, 16)
     except ValueError:
         return False
+    try:
+        expiry_value = _expiry(expires_at, f"{kind}_expires_at")
+    except BridgeError:
+        return False
+    if enforce_expiry and _now_epoch() > expiry_value:
+        return False
     nonce = token[:TOKEN_NONCE_LENGTH]
     expected = nonce + _token_signature(
         kind,
         command,
         nonce,
+        expires_at=expiry_value,
         parent_token=parent_token,
     )
     return hmac.compare_digest(token, expected)
@@ -304,16 +338,25 @@ def _issue_formal_approval(command: dict[str, Any]) -> dict[str, Any]:
         )
 
     proposal_token = command.get("proposal_token")
-    if not _verify_signed_token(proposal_token, "proposal", proposed):
+    proposal_expires_at = command.get("proposal_expires_at")
+    if not _verify_signed_token(
+        proposal_token,
+        "proposal",
+        proposed,
+        expires_at=proposal_expires_at,
+        enforce_expiry=True,
+    ):
         raise BridgeError(
-            "formal approval blocked: proposal_token mismatch or invalid; "
+            "formal approval blocked: proposal_token mismatch, invalid, or expired; "
             "request a fresh proposal"
         )
 
     assert isinstance(proposal_token, str)
+    approval_expires_at = _now_epoch() + APPROVAL_TTL_SECONDS
     approval_token = _new_signed_token(
         "approval",
         proposed,
+        expires_at=approval_expires_at,
         parent_token=proposal_token,
     )
     return {
@@ -322,7 +365,10 @@ def _issue_formal_approval(command: dict[str, Any]) -> dict[str, Any]:
         "write_executed": False,
         "proposal_token_verified": True,
         "proposal_token": proposal_token,
+        "proposal_expires_at": _expiry(proposal_expires_at, "proposal_expires_at"),
         "approval_token": approval_token,
+        "approval_expires_at": approval_expires_at,
+        "approval_ttl_seconds": APPROVAL_TTL_SECONDS,
         "approval_code_length": TOKEN_LENGTH,
         "formal_approval_text": _formal_approval_text(proposed, approval_token),
         "approval_text_must_match_exactly": True,
@@ -331,8 +377,9 @@ def _issue_formal_approval(command: dict[str, Any]) -> dict[str, Any]:
         "write_account_pinned": bool(os.getenv("XADS_ACCOUNT_ID", "").strip()),
         "instruction": (
             "The proposal token was verified and the approval token is bound to it. "
-            "Show the formal approval sentence to the user. Execute nothing until the user "
-            "copies and returns that exact sentence character-for-character."
+            "The formal approval expires automatically. Show the formal approval sentence "
+            "to the user. Execute nothing until the user copies and returns that exact "
+            "sentence character-for-character."
         ),
     }
 
@@ -365,7 +412,12 @@ def _write_gate(command: dict[str, Any]) -> dict[str, Any] | None:
         and approval_text is None
         and command.get("user_approved") is None
     ):
-        fresh_proposal_token = _new_signed_token("proposal", command)
+        proposal_expires_at = _now_epoch() + PROPOSAL_TTL_SECONDS
+        fresh_proposal_token = _new_signed_token(
+            "proposal",
+            command,
+            expires_at=proposal_expires_at,
+        )
         return {
             "ok": True,
             "mode": "proposal",
@@ -374,6 +426,8 @@ def _write_gate(command: dict[str, Any]) -> dict[str, Any] | None:
             "requires_da_counter_da_review": True,
             "formal_approval_text_issued": False,
             "proposal_token": fresh_proposal_token,
+            "proposal_expires_at": proposal_expires_at,
+            "proposal_ttl_seconds": PROPOSAL_TTL_SECONDS,
             "proposal_token_length": TOKEN_LENGTH,
             "proposed_command": _approval_payload(command),
             "master_write_switch_enabled": _writes_enabled(),
@@ -381,29 +435,41 @@ def _write_gate(command: dict[str, Any]) -> dict[str, Any] | None:
             "next_step": (
                 f"After DA/counter-DA review and only if the user explicitly says "
                 f"'{FORMAL_APPROVAL_REQUEST}', submit this exact proposal together with "
-                "proposal_token to request a fresh formal approval token."
+                "proposal_token and proposal_expires_at to request a fresh formal approval token."
             ),
         }
 
-    # Stage 3: execution. Both tokens and the exact sentence must validate.
+    # Stage 3: execution. Both tokens, their signed expiries, and the exact sentence must validate.
     if command.get("user_approved") is not True:
         raise BridgeError("approved write blocked: user_approved must be true")
-    if not _verify_signed_token(proposal_token, "proposal", command):
+
+    proposal_expires_at = command.get("proposal_expires_at")
+    if not _verify_signed_token(
+        proposal_token,
+        "proposal",
+        command,
+        expires_at=proposal_expires_at,
+        enforce_expiry=False,
+    ):
         raise BridgeError(
             "approved write blocked: proposal_token mismatch or invalid; "
             "request a fresh proposal"
         )
     if not isinstance(proposal_token, str):
         raise BridgeError("approved write blocked: proposal_token is required")
+
+    approval_expires_at = command.get("approval_expires_at")
     if not _verify_signed_token(
         approval_token,
         "approval",
         command,
+        expires_at=approval_expires_at,
         parent_token=proposal_token,
+        enforce_expiry=True,
     ):
         raise BridgeError(
-            "approved write blocked: approval_token mismatch, invalid, or not bound "
-            "to this proposal_token"
+            "approved write blocked: approval_token mismatch, invalid, expired, or not bound "
+            "to this proposal_token; request a fresh formal approval"
         )
     if not isinstance(approval_token, str):
         raise BridgeError("approved write blocked: approval_token is required")
@@ -442,6 +508,8 @@ def execute(command: dict[str, Any]) -> dict[str, Any]:
             "proposal_token_required": True,
             "formal_approval_token_required": True,
             "approval_token_bound_to_proposal_token": True,
+            "proposal_ttl_seconds": PROPOSAL_TTL_SECONDS,
+            "approval_ttl_seconds": APPROVAL_TTL_SECONDS,
             "formal_approval_request_required": True,
             "formal_approval_request_text": FORMAL_APPROVAL_REQUEST,
             "exact_approval_text_required": True,
