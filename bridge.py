@@ -19,6 +19,7 @@ WRITE_COMMANDS = {
     "pause_line_item",
     "resume_line_item",
 }
+APPROVAL_CODE_LENGTH = 16
 
 
 class BridgeError(RuntimeError):
@@ -78,7 +79,7 @@ def _approval_payload(command: dict[str, Any]) -> dict[str, Any]:
     return {
         key: value
         for key, value in command.items()
-        if key not in {"user_approved", "approval_id"}
+        if key not in {"user_approved", "approval_id", "approval_text"}
     }
 
 
@@ -89,7 +90,42 @@ def _approval_id(command: dict[str, Any]) -> str:
         sort_keys=True,
         separators=(",", ":"),
     )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:APPROVAL_CODE_LENGTH]
+
+
+def _budget_display(command: dict[str, Any]) -> str:
+    if "amount_local" in command:
+        raw = Decimal(str(command["amount_local"]))
+    elif "amount_local_micro" in command:
+        raw = Decimal(str(command["amount_local_micro"])) / Decimal("1000000")
+    else:
+        return "<未指定>"
+    normalized = raw.normalize()
+    if normalized == normalized.to_integral():
+        return str(normalized.quantize(Decimal("1")))
+    return format(normalized, "f")
+
+
+def _approval_description(command: dict[str, Any]) -> str:
+    name = str(command.get("action", "")).strip()
+    if name == "pause_campaign":
+        return f"キャンペーン {str(command.get('campaign_id') or '').strip()} の停止"
+    if name == "resume_campaign":
+        return f"キャンペーン {str(command.get('campaign_id') or '').strip()} の再開"
+    if name == "set_daily_budget":
+        campaign_id = str(command.get("campaign_id") or "").strip()
+        return f"キャンペーン {campaign_id} の日予算を{_budget_display(command)}円に変更"
+    if name == "pause_line_item":
+        return f"広告セット {str(command.get('line_item_id') or '').strip()} の停止"
+    if name == "resume_line_item":
+        return f"広告セット {str(command.get('line_item_id') or '').strip()} の再開"
+    return name
+
+
+def _required_approval_text(command: dict[str, Any]) -> str:
+    approval_id = _approval_id(command)
+    description = _approval_description(command)
+    return f"承認コード {approval_id}：{description}を承認します"
 
 
 def _write_gate(command: dict[str, Any]) -> dict[str, Any] | None:
@@ -98,25 +134,48 @@ def _write_gate(command: dict[str, Any]) -> dict[str, Any] | None:
         return None
 
     expected_approval_id = _approval_id(command)
-    if command.get("user_approved") is not True:
+    expected_approval_text = _required_approval_text(command)
+    supplied_approval_id = command.get("approval_id")
+    supplied_approval_text = command.get("approval_text")
+
+    # No approval fields means proposal-only mode. No write is attempted.
+    if supplied_approval_id is None and supplied_approval_text is None:
         return {
             "ok": True,
             "mode": "proposal",
             "write_executed": False,
             "requires_user_approval": True,
+            "requires_da_counter_da_review": True,
             "approval_id": expected_approval_id,
+            "approval_code_length": APPROVAL_CODE_LENGTH,
+            "required_approval_text": expected_approval_text,
+            "approval_text_must_match_exactly": True,
             "proposed_command": _approval_payload(command),
             "master_write_switch_enabled": _writes_enabled(),
-            "instruction": "Do not execute this write until the user explicitly approves this exact proposal.",
+            "instruction": (
+                "Analyze the proposal, including DA and counter-DA when there are operational, "
+                "budget, targeting, duration, or other risk concerns. Do not execute unless the user "
+                "returns the required approval text exactly, character-for-character."
+            ),
         }
 
-    supplied_approval_id = str(command.get("approval_id") or "").strip()
-    if not supplied_approval_id:
-        raise BridgeError("approved write blocked: approval_id is required")
-    if supplied_approval_id != expected_approval_id:
+    if not isinstance(supplied_approval_id, str):
+        raise BridgeError("approved write blocked: approval_id must be a string")
+    if len(supplied_approval_id) != APPROVAL_CODE_LENGTH:
         raise BridgeError(
-            f"approved write blocked: approval_id mismatch (expected {expected_approval_id})"
+            f"approved write blocked: approval_id must be exactly {APPROVAL_CODE_LENGTH} characters"
         )
+    if supplied_approval_id != expected_approval_id:
+        raise BridgeError("approved write blocked: approval_id mismatch; request a fresh proposal")
+
+    if not isinstance(supplied_approval_text, str):
+        raise BridgeError("approved write blocked: approval_text is required")
+    # Intentionally no trimming or normalization: any extra/missing character fails.
+    if supplied_approval_text != expected_approval_text:
+        raise BridgeError(
+            "approved write blocked: approval_text mismatch; exact character-for-character approval is required"
+        )
+
     if not _writes_enabled():
         raise BridgeError(
             "approved write blocked: master switch XADS_ALLOW_WRITES is not true"
@@ -165,6 +224,8 @@ def execute(command: dict[str, Any]) -> dict[str, Any]:
             "api_version": API_VERSION,
             "writes_enabled": _writes_enabled(),
             "per_write_user_approval": True,
+            "exact_approval_text_required": True,
+            "approval_code_length": APPROVAL_CODE_LENGTH,
         }
 
     proposal = _write_gate(command)
