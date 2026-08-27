@@ -125,7 +125,10 @@ def inspect_external_signal(
         + 0.07 * freshness,
         4,
     )
-    if score >= 0.72:
+    # A signal can be HIGH without matching the current offer wording exactly. For example,
+    # a near-case may strongly match the product topic, pain and buying intent while using
+    # different CTA language. Keep the threshold below that common near-case shape.
+    if score >= 0.68:
         band: RelevanceBand = "HIGH"
     elif score >= 0.48:
         band = "MEDIUM"
