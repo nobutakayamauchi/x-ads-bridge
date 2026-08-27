@@ -1,0 +1,26 @@
+[Unit]
+Description=X Ads Funnel Telemetry
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Replace with the existing unprivileged service account used on the Oracle host.
+User=webai-bridge
+Group=webai-bridge
+WorkingDirectory=/opt/x-ads-bridge
+EnvironmentFile=/etc/x-ads-funnel/funnel.env
+ExecStart=/opt/x-ads-funnel-venv/bin/uvicorn funnel_service:app --host 127.0.0.1 --port 8766 --no-access-log
+Restart=on-failure
+RestartSec=3
+UMask=0077
+
+# Basic hardening. The service needs write access only to its own state directory.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/x-ads-funnel
+
+[Install]
+WantedBy=multi-user.target
