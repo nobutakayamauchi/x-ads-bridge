@@ -27,17 +27,29 @@ ALLOWED_ORIGINS = [
     if item.strip()
 ]
 RATE_LIMIT_PER_MINUTE = int(os.getenv("FUNNEL_RATE_LIMIT_PER_MINUTE", "120"))
+CLIENT_REFERENCE_PREFIX = "wab_"
+JOIN_KEY_EVENTS = {"consult_click", "purchase_click"}
 
 ALLOWED_EVENTS = {
     "lp_view",
     "consult_click",
     "purchase_click",
+    "consult_cta_view",
+    "purchase_cta_view",
+    "consult_checkout_start",
+    "purchase_checkout_start",
+    "consult_checkout_return",
+    "purchase_checkout_return",
+    "scroll_25",
+    "scroll_50",
+    "scroll_75",
+    "scroll_90",
     "contact_complete",
     # Diagnostic only. Real purchase authority must come from Stripe, not this browser event.
     "purchase_complete_client",
 }
 
-app = FastAPI(title="X Ads Funnel Telemetry", version="1.0.0")
+app = FastAPI(title="X Ads Funnel Telemetry", version="1.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -152,6 +164,8 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             ON events(product, received_at);
         CREATE INDEX IF NOT EXISTS idx_events_device
             ON events(device_hash);
+        CREATE INDEX IF NOT EXISTS idx_events_session
+            ON events(session_id);
         CREATE TABLE IF NOT EXISTS exclusions (
             device_hash TEXT PRIMARY KEY,
             label TEXT NOT NULL,
@@ -206,11 +220,15 @@ def _insert_event(event: FunnelEvent) -> bool:
         return cursor.rowcount == 1
 
 
-def _query_summary(product: str, start_epoch: int, end_epoch: int) -> dict[str, Any]:
+def _validate_window(product: str, start_epoch: int, end_epoch: int) -> None:
     if not product or len(product) > 80:
         raise HTTPException(status_code=422, detail="invalid product")
     if start_epoch < 0 or end_epoch <= start_epoch:
         raise HTTPException(status_code=422, detail="invalid time window")
+
+
+def _query_summary(product: str, start_epoch: int, end_epoch: int) -> dict[str, Any]:
+    _validate_window(product, start_epoch, end_epoch)
 
     with _db() as conn:
         rows = conn.execute(
@@ -263,6 +281,69 @@ def _query_summary(product: str, start_epoch: int, end_epoch: int) -> dict[str, 
         "authority_note": (
             "Browser purchase completion is diagnostic only. Authoritative purchases must be "
             "joined from Stripe/payment records by the audit layer."
+        ),
+    }
+
+
+def _query_join_keys(product: str, start_epoch: int, end_epoch: int) -> dict[str, Any]:
+    _validate_window(product, start_epoch, end_epoch)
+
+    placeholders = ",".join("?" for _ in JOIN_KEY_EVENTS)
+    params: list[Any] = [product, start_epoch, end_epoch, *sorted(JOIN_KEY_EVENTS)]
+    with _db() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT
+                e.session_id,
+                MIN(e.received_at) AS first_event_at,
+                MAX(e.received_at) AS last_event_at,
+                GROUP_CONCAT(DISTINCT e.event) AS events
+            FROM events e
+            LEFT JOIN exclusions x ON x.device_hash = e.device_hash
+            WHERE e.product = ?
+              AND e.received_at >= ?
+              AND e.received_at < ?
+              AND x.device_hash IS NULL
+              AND e.event IN ({placeholders})
+            GROUP BY e.session_id
+            ORDER BY last_event_at DESC
+            LIMIT 500
+            """,
+            params,
+        ).fetchall()
+
+    join_keys = []
+    for row in rows:
+        session_id = str(row["session_id"] or "").strip()
+        if not session_id:
+            continue
+        events = sorted(
+            event
+            for event in str(row["events"] or "").split(",")
+            if event in JOIN_KEY_EVENTS
+        )
+        if not events:
+            continue
+        join_keys.append(
+            {
+                "client_reference_id": f"{CLIENT_REFERENCE_PREFIX}{session_id}",
+                "events": events,
+                "first_event_at": int(row["first_event_at"] or 0),
+                "last_event_at": int(row["last_event_at"] or 0),
+            }
+        )
+
+    return {
+        "ok": True,
+        "product": product,
+        "start_epoch": start_epoch,
+        "end_epoch": end_epoch,
+        "join_keys": join_keys,
+        "join_key_count": len(join_keys),
+        "owner_excluded": True,
+        "privacy_note": (
+            "Join keys contain only a pseudonymous browser session reference and CTA event names; "
+            "device hashes and customer PII are not returned."
         ),
     }
 
@@ -326,3 +407,14 @@ def summary(
 ) -> dict[str, Any]:
     _require_audit_token(authorization)
     return _query_summary(product, start_epoch, end_epoch)
+
+
+@app.get("/v1/join-keys")
+def join_keys(
+    product: str,
+    start_epoch: int,
+    end_epoch: int,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    _require_audit_token(authorization)
+    return _query_join_keys(product, start_epoch, end_epoch)
