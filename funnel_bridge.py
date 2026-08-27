@@ -49,6 +49,20 @@ def _json_response(response: requests.Response) -> dict[str, Any]:
     return payload
 
 
+def _window(command: dict[str, Any]) -> tuple[str, int, int]:
+    product = str(command.get("product") or "").strip()
+    start_epoch = command.get("start_epoch")
+    end_epoch = command.get("end_epoch")
+    if not product:
+        raise FunnelBridgeError("product is required")
+    try:
+        start_epoch = int(start_epoch)
+        end_epoch = int(end_epoch)
+    except (TypeError, ValueError) as exc:
+        raise FunnelBridgeError("start_epoch and end_epoch must be integers") from exc
+    return product, start_epoch, end_epoch
+
+
 def execute(command: dict[str, Any]) -> dict[str, Any]:
     action = str(command.get("action") or "").strip()
     if not action:
@@ -59,19 +73,11 @@ def execute(command: dict[str, Any]) -> dict[str, Any]:
     if action == "funnel_health":
         return _json_response(requests.get(f"{base}/health", timeout=20))
 
-    if action == "funnel_summary":
-        product = str(command.get("product") or "").strip()
-        start_epoch = command.get("start_epoch")
-        end_epoch = command.get("end_epoch")
-        if not product:
-            raise FunnelBridgeError("product is required")
-        try:
-            start_epoch = int(start_epoch)
-            end_epoch = int(end_epoch)
-        except (TypeError, ValueError) as exc:
-            raise FunnelBridgeError("start_epoch and end_epoch must be integers") from exc
+    if action in {"funnel_summary", "funnel_join_keys"}:
+        product, start_epoch, end_epoch = _window(command)
+        endpoint = "/v1/summary" if action == "funnel_summary" else "/v1/join-keys"
         response = requests.get(
-            f"{base}/v1/summary",
+            f"{base}{endpoint}",
             params={
                 "product": product,
                 "start_epoch": start_epoch,
