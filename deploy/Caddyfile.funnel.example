@@ -1,0 +1,12 @@
+# Add this handle BEFORE the existing catch-all WebAI reverse_proxy
+# inside the existing webai.140-238-62-74.sslip.io site block.
+#
+# `handle_path` strips `/funnel`, so public `/funnel/v1/events`
+# reaches the telemetry service as `/v1/events`.
+
+handle_path /funnel/* {
+    reverse_proxy 127.0.0.1:8766
+}
+
+# Keep the existing WebAI catch-all after the funnel handle, for example:
+# reverse_proxy 127.0.0.1:8080
