@@ -27,9 +27,12 @@ The bridge returns:
 - `mode=proposal`
 - `write_executed=false`
 - a fresh randomized 16-character `proposal_token`
+- `proposal_expires_at`
 - the exact `proposed_command`
 
-The proposal token is cryptographically bound to the exact proposed command. Changing the account, target ID, action, amount, or any other command field invalidates it.
+The proposal token is cryptographically bound to the exact proposed command and its expiry. Changing the account, target ID, action, amount, expiry, or any other command field invalidates it.
+
+Default proposal lifetime: **60 minutes**.
 
 No formal approval sentence is exposed at this stage.
 
@@ -47,10 +50,14 @@ The bridge requires all of the following:
 - `da_counter_da_review_complete=true`
 - the exact proposed command
 - the matching proposal token
+- the signed proposal expiry
+- the proposal must still be unexpired
 
-If all checks pass, the bridge returns a new randomized 16-character `approval_token` and a formal approval sentence.
+If all checks pass, the bridge returns a new randomized 16-character `approval_token`, its expiry, and a formal approval sentence.
 
 The approval token is bound to **both** the exact proposed command and the verified proposal token.
+
+Default formal approval lifetime: **15 minutes**.
 
 Still no X Ads write occurs.
 
@@ -62,8 +69,9 @@ The human must copy and return the formal approval sentence exactly, for example
 
 Execution requires all of the following at the same time:
 
-- the original proposal token
-- the formal approval token
+- the original proposal token and its signed expiry
+- the formal approval token and its signed expiry
+- the formal approval must still be unexpired
 - `user_approved=true`
 - the exact formal approval sentence, character-for-character
 - the exact same command that was proposed
@@ -72,7 +80,7 @@ Execution requires all of the following at the same time:
 - a newly **opened** GitHub Issue event
 - any applicable budget cap check
 
-Any missing, extra, changed, shortened, or mistyped character blocks the write.
+Any missing, extra, changed, shortened, mistyped, expired, or mismatched element blocks the write.
 
 Words such as `OK`, `承認`, `やって`, or `それでいい` are never sufficient.
 
@@ -81,13 +89,14 @@ Words such as `OK`, `承認`, `やって`, or `それでいい` are never suffic
 1. **Human final authority** — analysis and recommendations may be automated; writes never are.
 2. **Two-token chain** — proposal token and approval token are separate randomized values.
 3. **Parent binding** — the approval token is bound to the exact proposal token that was verified.
-4. **Exact-text approval** — no trimming, normalization, fuzzy matching, or speech-intent inference is allowed for the final sentence.
-5. **No reopen execution** — reopening an approved Issue cannot execute a write. A write execution must arrive as a newly opened Issue.
-6. **Pinned account** — approved writes are blocked unless the requested account equals `XADS_ACCOUNT_ID`.
-7. **Master kill switch** — `XADS_ALLOW_WRITES` must be exactly `true` for any write.
-8. **Budget breaker** — budget writes are additionally bounded by `XADS_MAX_DAILY_BUDGET_LOCAL`.
-9. **Owner-only GitHub entry** — the workflow executes only Issues authored by the repository owner and titled with `[xads]`.
-10. **No secrets in Issues** — OAuth secrets and GitHub Secrets must never be written into Issue bodies, comments, logs, or approval text.
+4. **Expiry** — proposal tokens expire by default after 60 minutes; formal approval tokens expire by default after 15 minutes.
+5. **Exact-text approval** — no trimming, normalization, fuzzy matching, or speech-intent inference is allowed for the final sentence.
+6. **No reopen execution** — reopening an approved Issue cannot execute a write. A write execution must arrive as a newly opened Issue.
+7. **Pinned account** — approved writes are blocked unless the requested account equals `XADS_ACCOUNT_ID`.
+8. **Master kill switch** — `XADS_ALLOW_WRITES` must be exactly `true` for any write.
+9. **Budget breaker** — budget writes are additionally bounded by `XADS_MAX_DAILY_BUDGET_LOCAL`.
+10. **Owner-only GitHub entry** — the workflow executes only Issues authored by the repository owner and titled with `[xads]`.
+11. **No secrets in Issues** — OAuth secrets and GitHub Secrets must never be written into Issue bodies, comments, logs, or approval text.
 
 ## Supported writes
 
