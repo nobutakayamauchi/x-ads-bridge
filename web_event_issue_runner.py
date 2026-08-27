@@ -53,15 +53,17 @@ def _read_command() -> dict[str, Any]:
     return command
 
 
-def _request_tags(command: dict[str, Any]) -> dict[str, Any]:
-    if str(command.get("action") or "").strip() != "list_web_event_tags":
-        raise WebEventBridgeError("only action=list_web_event_tags is supported")
+def _account_id(command: dict[str, Any]) -> str:
     account_id = str(command.get("account_id") or DEFAULT_ACCOUNT_ID).strip()
     if not account_id:
         raise WebEventBridgeError("account_id is required")
+    return account_id
+
+
+def _get(path: str, params: dict[str, Any]) -> dict[str, Any]:
     response = requests.get(
-        f"{BASE_URL}/{API_VERSION}/accounts/{account_id}/web_event_tags",
-        params={"with_deleted": str(bool(command.get("with_deleted", False))).lower()},
+        f"{BASE_URL}/{API_VERSION}/{path.lstrip('/')}",
+        params=params,
         auth=_auth(),
         timeout=45,
     )
@@ -73,7 +75,44 @@ def _request_tags(command: dict[str, Any]) -> dict[str, Any]:
         raise WebEventBridgeError(
             f"X Ads API {response.status_code}: {json.dumps(payload, ensure_ascii=False)[:4000]}"
         )
+    if not isinstance(payload, dict):
+        raise WebEventBridgeError("X Ads API response must be an object")
     return payload
+
+
+def _execute(command: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    action = str(command.get("action") or "").strip()
+    account_id = _account_id(command)
+
+    if action == "list_web_event_tags":
+        payload = _get(
+            f"accounts/{account_id}/web_event_tags",
+            {"with_deleted": str(bool(command.get("with_deleted", False))).lower()},
+        )
+        return "X Ads web event tags result", payload
+
+    if action == "list_targeting_criteria":
+        line_item_ids = command.get("line_item_ids")
+        if isinstance(line_item_ids, list):
+            values = [str(value).strip() for value in line_item_ids if str(value).strip()]
+            line_item_ids = ",".join(values)
+        else:
+            line_item_ids = str(line_item_ids or "").strip()
+        if not line_item_ids:
+            raise WebEventBridgeError("line_item_ids is required")
+        payload = _get(
+            f"accounts/{account_id}/targeting_criteria",
+            {
+                "line_item_ids": line_item_ids,
+                "count": int(command.get("count") or 200),
+                "with_deleted": str(bool(command.get("with_deleted", False))).lower(),
+            },
+        )
+        return "X Ads targeting criteria result", payload
+
+    raise WebEventBridgeError(
+        "supported actions: list_web_event_tags, list_targeting_criteria"
+    )
 
 
 def _write_result(title: str, payload: dict[str, Any]) -> None:
@@ -86,11 +125,11 @@ def _write_result(title: str, payload: dict[str, Any]) -> None:
 def main() -> int:
     try:
         command = _read_command()
-        payload = _request_tags(command)
-        _write_result("X Ads web event tags result", payload)
+        title, payload = _execute(command)
+        _write_result(title, payload)
         return 0
     except Exception as exc:
-        _write_result("X Ads web event tags failed", {"ok": False, "error": str(exc)})
+        _write_result("X Ads inspection failed", {"ok": False, "error": str(exc)})
         return 1
 
 
