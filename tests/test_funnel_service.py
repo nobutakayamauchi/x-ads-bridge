@@ -89,6 +89,83 @@ class FunnelTelemetryTests(unittest.TestCase):
         self.assertEqual(summary["derived"]["lp_unique"], 1)
         self.assertEqual(summary["derived"]["purchase_click_unique"], 0)
 
+    def test_join_keys_include_customer_cta_but_never_owner_cta(self):
+        owner_device = "device-owner-00000001"
+        customer_device = "device-customer-0001"
+        owner_session = "owner-session-12345678"
+        customer_session = "customer-session-12345678"
+
+        funnel_service._insert_event(
+            self._event(
+                event_id="event-00000001",
+                event="purchase_click",
+                device_id=owner_device,
+                session_id=owner_session,
+            )
+        )
+        funnel_service._insert_event(
+            self._event(
+                event_id="event-00000002",
+                event="consult_click",
+                device_id=customer_device,
+                session_id=customer_session,
+            )
+        )
+        funnel_service._insert_event(
+            self._event(
+                event_id="event-00000003",
+                event="purchase_click",
+                device_id=customer_device,
+                session_id=customer_session,
+            )
+        )
+
+        owner_hash = funnel_service._device_hash(owner_device)
+        with funnel_service._db() as conn:
+            conn.execute(
+                "INSERT INTO exclusions(device_hash, label, created_at) VALUES (?, ?, ?)",
+                (owner_hash, "owner-iphone", 1),
+            )
+
+        result = funnel_service._query_join_keys("webai-bridge", 0, 4_000_000_000)
+        self.assertEqual(result["join_key_count"], 1)
+        self.assertTrue(result["owner_excluded"])
+        self.assertEqual(
+            result["join_keys"][0]["client_reference_id"],
+            f"wab_{customer_session}",
+        )
+        self.assertEqual(
+            result["join_keys"][0]["events"],
+            ["consult_click", "purchase_click"],
+        )
+        self.assertNotIn(owner_session, str(result))
+        self.assertNotIn("device_hash", str(result))
+
+    def test_extended_tracker_events_are_accepted(self):
+        for index, event_name in enumerate(
+            [
+                "consult_cta_view",
+                "purchase_cta_view",
+                "consult_checkout_start",
+                "purchase_checkout_start",
+                "consult_checkout_return",
+                "purchase_checkout_return",
+                "scroll_25",
+                "scroll_50",
+                "scroll_75",
+                "scroll_90",
+            ],
+            start=1,
+        ):
+            inserted = funnel_service._insert_event(
+                self._event(
+                    event_id=f"extended-event-{index:04d}",
+                    event=event_name,
+                    device_id="device-customer-0001",
+                )
+            )
+            self.assertTrue(inserted)
+
     def test_raw_device_id_is_not_stored_in_events(self):
         raw_device = "device-sensitive-local-id-12345"
         funnel_service._insert_event(
