@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from decimal import Decimal, InvalidOperation
@@ -69,11 +70,58 @@ def _account(command: dict[str, Any]) -> str:
     return account_id
 
 
-def _write_guard(command_name: str) -> None:
-    if command_name not in WRITE_COMMANDS:
-        return
-    if os.getenv("XADS_ALLOW_WRITES", "").strip().lower() != "true":
-        raise BridgeError("write blocked: set XADS_ALLOW_WRITES=true only when you are ready")
+def _writes_enabled() -> bool:
+    return os.getenv("XADS_ALLOW_WRITES", "").strip().lower() == "true"
+
+
+def _approval_payload(command: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in command.items()
+        if key not in {"user_approved", "approval_id"}
+    }
+
+
+def _approval_id(command: dict[str, Any]) -> str:
+    canonical = json.dumps(
+        _approval_payload(command),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+
+
+def _write_gate(command: dict[str, Any]) -> dict[str, Any] | None:
+    name = str(command.get("action", "")).strip()
+    if name not in WRITE_COMMANDS:
+        return None
+
+    expected_approval_id = _approval_id(command)
+    if command.get("user_approved") is not True:
+        return {
+            "ok": True,
+            "mode": "proposal",
+            "write_executed": False,
+            "requires_user_approval": True,
+            "approval_id": expected_approval_id,
+            "proposed_command": _approval_payload(command),
+            "master_write_switch_enabled": _writes_enabled(),
+            "instruction": "Do not execute this write until the user explicitly approves this exact proposal.",
+        }
+
+    supplied_approval_id = str(command.get("approval_id") or "").strip()
+    if not supplied_approval_id:
+        raise BridgeError("approved write blocked: approval_id is required")
+    if supplied_approval_id != expected_approval_id:
+        raise BridgeError(
+            f"approved write blocked: approval_id mismatch (expected {expected_approval_id})"
+        )
+    if not _writes_enabled():
+        raise BridgeError(
+            "approved write blocked: master switch XADS_ALLOW_WRITES is not true"
+        )
+    return None
 
 
 def _budget_micro(command: dict[str, Any]) -> int:
@@ -115,10 +163,13 @@ def execute(command: dict[str, Any]) -> dict[str, Any]:
             "ok": True,
             "bridge": "x-ads-bridge",
             "api_version": API_VERSION,
-            "writes_enabled": os.getenv("XADS_ALLOW_WRITES", "").strip().lower() == "true",
+            "writes_enabled": _writes_enabled(),
+            "per_write_user_approval": True,
         }
 
-    _write_guard(name)
+    proposal = _write_gate(command)
+    if proposal is not None:
+        return proposal
 
     if name == "list_accounts":
         return _request("GET", "accounts")
