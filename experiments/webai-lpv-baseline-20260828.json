@@ -1,0 +1,99 @@
+{
+  "experiment_id": "WAB-EXP-LPV-20260828",
+  "purpose": "Test whether the previous WebAI Bridge campaign underperformed because X optimized for link clicks without a verified website signal.",
+  "prior_control": {
+    "campaign_id": "p5vot",
+    "campaign_name": "WebAI Bridge LP Test 5000",
+    "line_item_id": "xhwda",
+    "line_item_name": "WAB_LP_TEST_B2",
+    "objective": "WEBSITE_CLICKS",
+    "goal": "LINK_CLICKS",
+    "primary_web_event_tag": null,
+    "bid_strategy": "AUTO",
+    "daily_budget_jpy": 1700,
+    "total_budget_jpy": 5000,
+    "observed": {
+      "impressions": 23821,
+      "link_clicks": 102,
+      "ctr": 0.00428,
+      "cpc_jpy_approx": 34.9,
+      "cpm_jpy_approx": 149
+    }
+  },
+  "new_baseline": {
+    "campaign_name": "WAB_20260828_LPV_BASELINE",
+    "ad_group_name": "WAB_B2_LPV_CURRENT_TARGET",
+    "objective_ui": "Website traffic",
+    "optimization": "Website traffic / landing-page visit",
+    "key_conversion": {
+      "pixel_id": "reoqz",
+      "event_id": "140u8k",
+      "event_name": "Landing page views",
+      "event_type": "LANDING_PAGE_VIEW"
+    },
+    "bid_strategy": "AUTO",
+    "daily_budget_jpy": 1700,
+    "diagnostic_spend_cap_jpy": 2500,
+    "placements": ["ALL_ON_TWITTER"],
+    "creative": "Keep existing B2 creative unchanged",
+    "landing_page": "Keep current WebAI Bridge LP content unchanged; X Pixel base code is now installed",
+    "destination_url": "https://ultimatefire.jp/webai-bridge/?utm_source=x&utm_medium=paid&utm_campaign=wab_20260828_lpv_baseline&utm_content=b2_current_target",
+    "targeting": {
+      "location": ["Japan"],
+      "broad_keywords": [
+        "GPTs",
+        "GPTs 販売",
+        "GPTs 作成",
+        "GPTs 開発",
+        "GPT 販売",
+        "GPT 作成",
+        "ChatGPT",
+        "ChatGPT ビジネス",
+        "ChatGPT 活用",
+        "ChatGPT 販売",
+        "生成AI",
+        "生成AI ビジネス",
+        "生成AI 活用",
+        "生成AI 開発",
+        "AI商品",
+        "AI商品 販売",
+        "AIツール",
+        "AIツール 販売",
+        "AIツール 開発",
+        "AIサービス"
+      ]
+    }
+  },
+  "preflight_gate": [
+    "Do not launch while the Landing Page View event is UNVERIFIED / has no observed activity.",
+    "Open the deployed landing page in a real browser and confirm the X Pixel fires, preferably with X Pixel Helper or Events Manager.",
+    "Pause the old WAB_LP_TEST_B2 line item before launching the new baseline so campaigns do not compete or continue spending in parallel."
+  ],
+  "fixed_variables": [
+    "B2 creative",
+    "visible LP content",
+    "Japan + existing 20 BROAD_KEYWORD targeting criteria",
+    "AUTO bid",
+    "X placements"
+  ],
+  "changed_variable": "Optimization/measurement signal: LINK_CLICKS with no primary event -> verified Landing Page View website signal",
+  "measurement": [
+    "spend",
+    "impressions",
+    "CPM",
+    "link_clicks",
+    "CTR",
+    "CPC",
+    "landing_page_views",
+    "link_click_to_lpv_rate",
+    "cost_per_lpv",
+    "consult_clicks from first-party funnel tracker",
+    "consult_click_rate_per_lpv"
+  ],
+  "checkpoint": {
+    "directional_review_after_lpv": 20,
+    "hard_spend_cap_jpy": 2500,
+    "note": "20 LPVs is a directional checkpoint, not a statistical-significance claim. Stop at the spend cap if not reached."
+  },
+  "phase_2_only_after_phase_1": "If LPV tracking works, test targeting separately. Do not change targeting during this baseline because the old 20 BROAD_KEYWORD criteria are OR-combined, not a 20-way AND filter."
+}
