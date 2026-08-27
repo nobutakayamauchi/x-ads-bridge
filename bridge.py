@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import os
+import secrets
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -21,9 +22,10 @@ WRITE_COMMANDS = {
     "resume_line_item",
 }
 FORMAL_APPROVAL_REQUEST = "正式承認文出してください"
-APPROVAL_CODE_LENGTH = 16
-PROPOSAL_ID_LENGTH = 12
+TOKEN_LENGTH = 16
+TOKEN_NONCE_LENGTH = 6
 CONTROL_FIELDS = {
+    "proposal_token",
     "approval_token",
     "approval_text",
     "user_approved",
@@ -96,15 +98,33 @@ def _canonical_payload(command: dict[str, Any]) -> str:
     )
 
 
-def _proposal_id(command: dict[str, Any]) -> str:
-    return hashlib.sha256(_canonical_payload(command).encode("utf-8")).hexdigest()[:PROPOSAL_ID_LENGTH]
+def _signing_key() -> bytes:
+    # Hidden server-side material already present in GitHub Secrets.
+    return _required_env("XADS_ACCESS_TOKEN_SECRET").encode("utf-8")
 
 
-def _approval_token(command: dict[str, Any]) -> str:
-    # Domain-separated HMAC: changing the X access-token secret invalidates old approvals automatically.
-    signing_key = _required_env("XADS_ACCESS_TOKEN_SECRET").encode("utf-8")
-    message = ("xads-formal-approval-v1|" + _canonical_payload(command)).encode("utf-8")
-    return hmac.new(signing_key, message, hashlib.sha256).hexdigest()[:APPROVAL_CODE_LENGTH]
+def _token_signature(kind: str, command: dict[str, Any], nonce: str) -> str:
+    message = f"xads-{kind}-v2|{nonce}|{_canonical_payload(command)}".encode("utf-8")
+    digest = hmac.new(_signing_key(), message, hashlib.sha256).hexdigest()
+    return digest[: TOKEN_LENGTH - TOKEN_NONCE_LENGTH]
+
+
+def _new_signed_token(kind: str, command: dict[str, Any]) -> str:
+    # Random-looking nonce + HMAC signature bound to the exact proposed command.
+    nonce = secrets.token_hex(TOKEN_NONCE_LENGTH // 2)
+    return nonce + _token_signature(kind, command, nonce)
+
+
+def _verify_signed_token(token: object, kind: str, command: dict[str, Any]) -> bool:
+    if not isinstance(token, str) or len(token) != TOKEN_LENGTH:
+        return False
+    try:
+        int(token, 16)
+    except ValueError:
+        return False
+    nonce = token[:TOKEN_NONCE_LENGTH]
+    expected = nonce + _token_signature(kind, command, nonce)
+    return hmac.compare_digest(token, expected)
 
 
 def _budget_display(command: dict[str, Any]) -> str:
@@ -136,10 +156,9 @@ def _approval_description(command: dict[str, Any]) -> str:
     return name
 
 
-def _formal_approval_text(command: dict[str, Any]) -> str:
-    token = _approval_token(command)
+def _formal_approval_text(command: dict[str, Any], approval_token: str) -> str:
     description = _approval_description(command)
-    return f"正式承認コード {token}：{description}を承認します"
+    return f"正式承認コード {approval_token}：{description}を承認します"
 
 
 def _issue_formal_approval(command: dict[str, Any]) -> dict[str, Any]:
@@ -158,21 +177,25 @@ def _issue_formal_approval(command: dict[str, Any]) -> dict[str, Any]:
     if command.get("da_counter_da_review_complete") is not True:
         raise BridgeError("formal approval blocked: DA/counter-DA review must be marked complete")
 
-    token = _approval_token(proposed)
+    proposal_token = command.get("proposal_token")
+    if not _verify_signed_token(proposal_token, "proposal", proposed):
+        raise BridgeError("formal approval blocked: proposal_token mismatch or invalid; request a fresh proposal")
+
+    approval_token = _new_signed_token("approval", proposed)
     return {
         "ok": True,
         "mode": "formal_approval_issued",
         "write_executed": False,
-        "proposal_id": _proposal_id(proposed),
-        "approval_token": token,
-        "approval_code_length": APPROVAL_CODE_LENGTH,
-        "formal_approval_text": _formal_approval_text(proposed),
+        "proposal_token_verified": True,
+        "approval_token": approval_token,
+        "approval_code_length": TOKEN_LENGTH,
+        "formal_approval_text": _formal_approval_text(proposed, approval_token),
         "approval_text_must_match_exactly": True,
         "proposed_command": _approval_payload(proposed),
         "master_write_switch_enabled": _writes_enabled(),
         "instruction": (
-            "Show the formal approval text to the user only now. Execute nothing until the user "
-            "copies and returns that exact sentence character-for-character."
+            "The proposal token was verified. Show the newly issued formal approval sentence to the user. "
+            "Execute nothing until the user copies and returns that exact sentence character-for-character."
         ),
     }
 
@@ -185,8 +208,9 @@ def _write_gate(command: dict[str, Any]) -> dict[str, Any] | None:
     supplied_token = command.get("approval_token")
     supplied_text = command.get("approval_text")
 
-    # Initial proposal stage: no executable approval data is exposed here.
+    # Stage 1: proposal only. A fresh randomized proposal token is issued, but no executable approval exists.
     if supplied_token is None and supplied_text is None:
+        proposal_token = _new_signed_token("proposal", command)
         return {
             "ok": True,
             "mode": "proposal",
@@ -194,31 +218,25 @@ def _write_gate(command: dict[str, Any]) -> dict[str, Any] | None:
             "requires_user_approval": True,
             "requires_da_counter_da_review": True,
             "formal_approval_text_issued": False,
-            "proposal_id": _proposal_id(command),
+            "proposal_token": proposal_token,
+            "proposal_token_length": TOKEN_LENGTH,
             "proposed_command": _approval_payload(command),
             "master_write_switch_enabled": _writes_enabled(),
             "next_step": (
                 f"After DA/counter-DA review and only if the user explicitly says '{FORMAL_APPROVAL_REQUEST}', "
-                "request formal approval issuance."
+                "submit this exact proposal together with proposal_token to request a fresh formal approval token."
             ),
         }
 
+    # Stage 3: execution. The exact formal approval sentence and token must both match this command.
     if command.get("user_approved") is not True:
         raise BridgeError("approved write blocked: user_approved must be true")
-    if not isinstance(supplied_token, str):
-        raise BridgeError("approved write blocked: approval_token is required")
-    if len(supplied_token) != APPROVAL_CODE_LENGTH:
-        raise BridgeError(
-            f"approved write blocked: approval_token must be exactly {APPROVAL_CODE_LENGTH} characters"
-        )
-
-    expected_token = _approval_token(command)
-    if not hmac.compare_digest(supplied_token, expected_token):
-        raise BridgeError("approved write blocked: approval_token mismatch; request a fresh formal approval")
+    if not _verify_signed_token(supplied_token, "approval", command):
+        raise BridgeError("approved write blocked: approval_token mismatch or invalid; request a fresh formal approval")
 
     if not isinstance(supplied_text, str):
         raise BridgeError("approved write blocked: approval_text is required")
-    expected_text = _formal_approval_text(command)
+    expected_text = _formal_approval_text(command, supplied_token)
     # No trimming or normalization: one wrong, missing, or extra character blocks execution.
     if supplied_text != expected_text:
         raise BridgeError(
@@ -271,10 +289,12 @@ def execute(command: dict[str, Any]) -> dict[str, Any]:
             "api_version": API_VERSION,
             "writes_enabled": _writes_enabled(),
             "per_write_user_approval": True,
+            "randomized_proposal_token": True,
+            "randomized_formal_approval_token": True,
             "formal_approval_request_required": True,
             "formal_approval_request_text": FORMAL_APPROVAL_REQUEST,
             "exact_approval_text_required": True,
-            "approval_code_length": APPROVAL_CODE_LENGTH,
+            "approval_code_length": TOKEN_LENGTH,
         }
 
     if name == "issue_write_approval":
