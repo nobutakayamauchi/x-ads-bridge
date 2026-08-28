@@ -26,28 +26,33 @@ The service operator must have written X approval for this X Integration before 
    - `XADS_ACCESS_TOKEN`
    - `XADS_ACCESS_TOKEN_SECRET`
    - `XADS_ACCOUNT_ID`
-   - `XADS_MAX_DAILY_BUDGET_LOCAL`
-   - `XADS_MAX_TOTAL_BUDGET_LOCAL`
    - `XADS_ALLOW_WRITES`
    - `XADS_REPORT_USERNAME`
    - `XADS_REPORT_PASSWORD`
    - `XADS_SERVICE_FEE_PERCENT` (beta default: `10`)
-3. Never put those values into ChatGPT messages, GitHub Issues, comments, or screenshots.
-4. Keep `XADS_ALLOW_WRITES=false` for initial verification.
-5. Run `ping` and `list_accounts` read-only checks.
-6. Verify the returned account is the intended Client account.
-7. Run a read-only campaign/list/stats check.
-8. Start `reporting_dashboard.py` on localhost and verify authenticated access. If exposing it outside localhost, place it behind suitable TLS/reverse-proxy controls.
-9. Verify all X analytics metric groups are offered by the reporting surface. Metric groups unavailable for that account/campaign must be shown as unavailable rather than silently omitted.
-10. Load `skills/x-ads-daseru-kun/SKILL.md` into the Client's ChatGPT/Codex workflow.
-11. Run a dry conversational flow through final specification and preview.
-12. Confirm approval hash and execution key are separate and that no write occurs before the final execution key.
-13. Configure and confirm both Client budget breakers: maximum daily budget and maximum total budget.
-14. For a new beta ad, use an existing published X Post ID and create the campaign bundle PAUSED first.
-15. Read back campaign, line item, targeting, and promoted Post from X and show the Client the actual X-side state.
-16. Only after Client acknowledgement, set `XADS_ALLOW_WRITES=true`.
-17. Activation must be a separate proposal/approval/execution flow from creation.
-18. Run one bounded acceptance action, then read back the resulting X Ads state.
+3. Budget caps are not credentials. The bundle workflow has conservative fail-safe beta defaults when no override is supplied:
+   - maximum daily budget: `JPY 2,000`
+   - maximum total budget: `JPY 5,000`
+4. If the Client-approved limits differ, configure dedicated deployment overrides:
+   - `XADS_MAX_DAILY_BUDGET_LOCAL`
+   - `XADS_MAX_TOTAL_BUDGET_LOCAL`
+   The requested campaign must stay at or below both limits. Prefer the lowest caps that satisfy the agreed first campaign.
+5. Never put credentials/tokens/passwords into ChatGPT messages, GitHub Issues, comments, or screenshots.
+6. Keep `XADS_ALLOW_WRITES=false` for initial verification.
+7. Run `ping` and `list_accounts` read-only checks.
+8. Verify the returned account is the intended Client account.
+9. Run a read-only campaign/list/stats check.
+10. Start `reporting_dashboard.py` on localhost and verify authenticated access. If exposing it outside localhost, place it behind suitable TLS/reverse-proxy controls.
+11. Verify all X analytics metric groups are offered by the reporting surface. Metric groups unavailable for that account/campaign must be shown as unavailable rather than silently omitted.
+12. Load `skills/x-ads-daseru-kun/SKILL.md` into the Client's ChatGPT/Codex workflow.
+13. Run a dry conversational flow through final specification and preview.
+14. Confirm approval hash and execution key are separate and that no write occurs before the final execution key.
+15. Confirm both Client budget breakers: maximum daily budget and maximum total budget, whether using the conservative defaults or explicit overrides.
+16. For a new beta ad, use an existing published X Post ID and create the campaign bundle PAUSED first.
+17. Read back campaign, line item, targeting, and promoted Post from X and show the Client the actual X-side state.
+18. Only after Client acknowledgement, set `XADS_ALLOW_WRITES=true`.
+19. Activation must be a separate proposal/approval/execution flow from creation.
+20. Run one bounded acceptance action, then read back the resulting X Ads state.
 
 ## First paid campaign rule
 
