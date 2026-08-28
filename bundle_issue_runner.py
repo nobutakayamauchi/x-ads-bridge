@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from bundle_operation_protocol import BundleOperationError, execute
+from creative_reference import CreativeReferenceError, normalize_bundle_command
 
 
 RESULT_PATH = Path("result.md")
@@ -32,7 +33,7 @@ def _parse_command(body: str) -> dict:
     parsed = json.loads(text)
     if not isinstance(parsed, dict):
         raise ValueError("issue body must be a JSON object")
-    return parsed
+    return normalize_bundle_command(parsed)
 
 
 def _write_result(title: str, payload: object) -> None:
@@ -68,7 +69,13 @@ def main() -> int:
         result = execute(command)
         _write_result("X Ads Bundle Operation Protocol", result)
         return 0 if result.get("ok", False) else 1
-    except (BundleOperationError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
+    except (
+        BundleOperationError,
+        CreativeReferenceError,
+        RuntimeError,
+        ValueError,
+        json.JSONDecodeError,
+    ) as exc:
         _write_result(
             "X Ads Bundle Operation blocked/failed",
             {"ok": False, "error": str(exc)},
