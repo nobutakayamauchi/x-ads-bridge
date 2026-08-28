@@ -9,14 +9,25 @@ REFUTE = "REFUTES_H1"
 
 
 def _source_family(case: dict[str, Any]) -> str:
+    """Return the independence family, not merely the publishing domain.
+
+    A third-party article that only relays an X product event is still evidence from
+    the X platform ecosystem for independence purposes. This prevents republishing
+    the same platform result from manufacturing false source diversity.
+    """
+    verification = case.get("verification") or {}
+    flags = set(verification.get("bias_flags") or [])
+    origin = str(case.get("evidence_origin_family") or "").strip()
+    if origin:
+        return origin
+    kind = str(case.get("source_kind") or "")
+    if kind.startswith("official_x_") or "platform_event_source_dependency" in flags:
+        return "x_platform_ecosystem"
     explicit = str(case.get("source_family") or "").strip()
     if explicit:
         return explicit
-    kind = str(case.get("source_kind") or "")
-    if kind.startswith("official_x_"):
-        return "x_official"
     if kind == "x_recent_search":
-        return "x_operator_posts"
+        return "independent_x_operator_posts"
     return kind or "unknown"
 
 
@@ -29,6 +40,8 @@ def _bias_multiplier(case: dict[str, Any]) -> float:
         multiplier *= 0.85
     if "platform_product_test" in flags:
         multiplier *= 0.78
+    if "platform_event_source_dependency" in flags:
+        multiplier *= 0.9
     if "product_launch_period" in flags or "2021_2022_product_launch_period" in flags:
         multiplier *= 0.9
     if "absolute_budget_not_disclosed" in flags or "participant_and_budget_details_not_disclosed" in flags:
