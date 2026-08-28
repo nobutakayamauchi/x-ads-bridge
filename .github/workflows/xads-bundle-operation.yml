@@ -43,8 +43,11 @@ jobs:
           XADS_ACCESS_TOKEN_SECRET: ${{ secrets.XADS_ACCESS_TOKEN_SECRET }}
           XADS_ACCOUNT_ID: ${{ secrets.XADS_ACCOUNT_ID }}
           XADS_ALLOW_WRITES: ${{ secrets.XADS_ALLOW_WRITES }}
-          XADS_MAX_DAILY_BUDGET_LOCAL: ${{ secrets.XADS_MAX_DAILY_BUDGET_LOCAL }}
-          XADS_MAX_TOTAL_BUDGET_LOCAL: ${{ secrets.XADS_MAX_TOTAL_BUDGET_LOCAL }}
+          # Budget caps are not credentials. Keep conservative beta defaults so a
+          # fresh dedicated deployment is bounded even before optional overrides
+          # are configured. A Client deployment may lower/raise them explicitly.
+          XADS_MAX_DAILY_BUDGET_LOCAL: ${{ secrets.XADS_MAX_DAILY_BUDGET_LOCAL || '2000' }}
+          XADS_MAX_TOTAL_BUDGET_LOCAL: ${{ secrets.XADS_MAX_TOTAL_BUDGET_LOCAL || '5000' }}
           XADS_API_VERSION: '12'
         run: python bundle_issue_runner.py
 
