@@ -1,22 +1,22 @@
-name: X Ads Bridge
+name: X Ads Operation Protocol 01
 
 on:
   issues:
-    types: [opened, reopened]
+    types: [opened]
 
 permissions:
   contents: read
   issues: write
 
 concurrency:
-  group: xads-issue-${{ github.event.issue.number }}
+  group: xop-issue-${{ github.event.issue.number }}
   cancel-in-progress: false
 
 jobs:
   execute:
     if: >-
       github.event.issue.user.login == github.repository_owner &&
-      startsWith(github.event.issue.title, '[xads]')
+      startsWith(github.event.issue.title, '[xop]')
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -33,8 +33,8 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
 
-      - name: Execute bridge command
-        id: bridge
+      - name: Run Operation Protocol 01
+        id: operation
         continue-on-error: true
         env:
           XADS_CONSUMER_KEY: ${{ secrets.XADS_CONSUMER_KEY }}
@@ -42,12 +42,10 @@ jobs:
           XADS_ACCESS_TOKEN: ${{ secrets.XADS_ACCESS_TOKEN }}
           XADS_ACCESS_TOKEN_SECRET: ${{ secrets.XADS_ACCESS_TOKEN_SECRET }}
           XADS_ACCOUNT_ID: ${{ secrets.XADS_ACCOUNT_ID }}
-          # Legacy [xads] is read/proposal/internal-approval only after XADS-OP-01.
-          # Paid writes must go through the [xop] approval-hash + execution-key path.
-          XADS_ALLOW_WRITES: 'false'
+          XADS_ALLOW_WRITES: ${{ secrets.XADS_ALLOW_WRITES }}
           XADS_MAX_DAILY_BUDGET_LOCAL: ${{ secrets.XADS_MAX_DAILY_BUDGET_LOCAL }}
           XADS_API_VERSION: '12'
-        run: python issue_runner.py
+        run: python operation_issue_runner.py
 
       - name: Post result to issue
         if: always()
@@ -56,6 +54,6 @@ jobs:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: gh issue comment "$ISSUE_NUMBER" --body-file result.md
 
-      - name: Mark workflow failed when bridge failed
-        if: steps.bridge.outcome == 'failure'
+      - name: Mark workflow failed when operation failed
+        if: steps.operation.outcome == 'failure'
         run: exit 1
