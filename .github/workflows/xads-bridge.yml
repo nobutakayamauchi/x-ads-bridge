@@ -42,7 +42,9 @@ jobs:
           XADS_ACCESS_TOKEN: ${{ secrets.XADS_ACCESS_TOKEN }}
           XADS_ACCESS_TOKEN_SECRET: ${{ secrets.XADS_ACCESS_TOKEN_SECRET }}
           XADS_ACCOUNT_ID: ${{ secrets.XADS_ACCOUNT_ID }}
-          XADS_ALLOW_WRITES: ${{ secrets.XADS_ALLOW_WRITES }}
+          # Legacy [xads] is read/proposal/internal-approval only after XADS-OP-01.
+          # Paid writes must go through the [xop] approval-hash + execution-key path.
+          XADS_ALLOW_WRITES: 'false'
           XADS_MAX_DAILY_BUDGET_LOCAL: ${{ secrets.XADS_MAX_DAILY_BUDGET_LOCAL }}
           XADS_API_VERSION: '12'
         run: python issue_runner.py
