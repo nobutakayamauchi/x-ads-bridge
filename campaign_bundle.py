@@ -93,6 +93,10 @@ def normalized_creation_plan(command: dict[str, Any]) -> dict[str, Any]:
     if goal not in {"SITE_VISITS", "LINK_CLICKS"}:
         raise CampaignBundleError("goal must be SITE_VISITS or LINK_CLICKS")
 
+    conversion_tag_id = str(command.get("conversion_tag_id") or "").strip()
+    if goal == "SITE_VISITS" and not conversion_tag_id:
+        raise CampaignBundleError("conversion_tag_id is required for SITE_VISITS")
+
     daily = _positive_jpy(command, "daily_budget_jpy")
     total = _positive_jpy(command, "total_budget_jpy")
     if total < daily:
@@ -107,6 +111,7 @@ def normalized_creation_plan(command: dict[str, Any]) -> dict[str, Any]:
         "daily_budget_jpy": daily,
         "total_budget_jpy": total,
         "goal": goal,
+        "conversion_tag_id": conversion_tag_id or None,
         "tweet_ids": _tweet_ids(command),
         "targeting": _targeting(command),
     }
@@ -137,25 +142,29 @@ def create_paused_website_traffic_bundle(
         campaign_id = _response_id(campaign_response, "campaign")
         created["campaign_id"] = campaign_id
 
+        line_item_data = {
+            "campaign_id": campaign_id,
+            "name": plan["line_item_name"],
+            "objective": "WEBSITE_CLICKS",
+            "goal": plan["goal"],
+            "product_type": "PROMOTED_TWEETS",
+            "placements": "ALL_ON_TWITTER",
+            "bid_strategy": "AUTO",
+            "pay_by": "IMPRESSION",
+            "entity_status": "PAUSED",
+            "standard_delivery": True,
+            "start_time": plan["start_time"],
+            "end_time": plan["end_time"],
+            "daily_budget_amount_local_micro": _micro(plan["daily_budget_jpy"]),
+            "total_budget_amount_local_micro": _micro(plan["total_budget_jpy"]),
+        }
+        if plan["conversion_tag_id"]:
+            line_item_data["conversion_tag_id"] = plan["conversion_tag_id"]
+
         line_item_response = request_fn(
             "POST",
             f"accounts/{account_id}/line_items",
-            data={
-                "campaign_id": campaign_id,
-                "name": plan["line_item_name"],
-                "objective": "WEBSITE_CLICKS",
-                "goal": plan["goal"],
-                "product_type": "PROMOTED_TWEETS",
-                "placements": "ALL_ON_TWITTER",
-                "bid_strategy": "AUTO",
-                "pay_by": "IMPRESSION",
-                "entity_status": "PAUSED",
-                "standard_delivery": True,
-                "start_time": plan["start_time"],
-                "end_time": plan["end_time"],
-                "daily_budget_amount_local_micro": _micro(plan["daily_budget_jpy"]),
-                "total_budget_amount_local_micro": _micro(plan["total_budget_jpy"]),
-            },
+            data=line_item_data,
         )
         line_item_id = _response_id(line_item_response, "line item")
         created["line_item_id"] = line_item_id

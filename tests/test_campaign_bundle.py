@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from campaign_bundle import (
+    CampaignBundleError,
     activate_campaign_bundle,
     create_paused_website_traffic_bundle,
     normalized_creation_plan,
@@ -18,6 +19,7 @@ BASE_COMMAND = {
     "daily_budget_jpy": 1000,
     "total_budget_jpy": 2000,
     "goal": "SITE_VISITS",
+    "conversion_tag_id": "tag1",
     "tweet_ids": ["123456"],
     "targeting": [
         {
@@ -33,8 +35,23 @@ class CampaignBundleTests(unittest.TestCase):
     def test_normalized_plan_is_paused_shape_input(self):
         plan = normalized_creation_plan(BASE_COMMAND)
         self.assertEqual(plan["goal"], "SITE_VISITS")
+        self.assertEqual(plan["conversion_tag_id"], "tag1")
         self.assertEqual(plan["tweet_ids"], ["123456"])
         self.assertEqual(len(plan["targeting"]), 1)
+
+    def test_site_visits_requires_conversion_tag(self):
+        command = dict(BASE_COMMAND)
+        command.pop("conversion_tag_id")
+        with self.assertRaisesRegex(CampaignBundleError, "conversion_tag_id is required"):
+            normalized_creation_plan(command)
+
+    def test_link_clicks_does_not_require_conversion_tag(self):
+        command = dict(BASE_COMMAND)
+        command["goal"] = "LINK_CLICKS"
+        command.pop("conversion_tag_id")
+        plan = normalized_creation_plan(command)
+        self.assertEqual(plan["goal"], "LINK_CLICKS")
+        self.assertIsNone(plan["conversion_tag_id"])
 
     def test_create_bundle_stays_paused_and_reads_back(self):
         calls = []
@@ -49,6 +66,7 @@ class CampaignBundleTests(unittest.TestCase):
                 self.assertEqual(kwargs["data"]["entity_status"], "PAUSED")
                 self.assertEqual(kwargs["data"]["objective"], "WEBSITE_CLICKS")
                 self.assertEqual(kwargs["data"]["goal"], "SITE_VISITS")
+                self.assertEqual(kwargs["data"]["conversion_tag_id"], "tag1")
                 return {"data": {"id": "li1"}}
             if method == "POST" and path.endswith("/targeting_criteria"):
                 return {"data": {"id": "tc1"}}
