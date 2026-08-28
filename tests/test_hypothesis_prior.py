@@ -30,6 +30,34 @@ class HypothesisPriorTests(unittest.TestCase):
         self.assertEqual(prior["prior_class"], "MODERATE_DIRECTIONAL_SUPPORT_INDEPENDENCE_LIMITED")
         self.assertFalse(prior["scale_authority"])
 
+    def test_press_relay_of_platform_event_does_not_create_fake_independence(self):
+        cases = [
+            {
+                "case_id": "official",
+                "source_kind": "official_x_case",
+                "h1_evidence_class": "DIRECT",
+                "direction": "SUPPORTS_H1",
+                "verification": {"evidence_strength": 0.9, "bias_flags": []},
+                "product_fit": {"score": 0.9},
+            },
+            {
+                "case_id": "press-relay",
+                "source_kind": "third_party_industry_report",
+                "source_family": "industry_press",
+                "h1_evidence_class": "DIRECT",
+                "direction": "SUPPORTS_H1",
+                "verification": {
+                    "evidence_strength": 0.8,
+                    "bias_flags": ["platform_event_source_dependency"],
+                },
+                "product_fit": {"score": 0.8},
+            },
+        ]
+        prior = build_directional_prior(cases)
+        self.assertEqual(prior["independent_source_families"], 1)
+        self.assertEqual(prior["source_families"], {"x_platform_ecosystem": 2})
+        self.assertEqual(prior["prior_class"], "MODERATE_DIRECTIONAL_SUPPORT_INDEPENDENCE_LIMITED")
+
     def test_independent_direct_support_can_be_strong(self):
         cases = [
             {
