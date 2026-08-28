@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 
@@ -10,13 +10,22 @@ REQUIRED_FILES = (
     "SELLABILITY_GATE.md",
     "skills/x-ads-daseru-kun/SKILL.md",
     "skills/x-ads-daseru-kun/references/OPERATION_PROTOCOL_01.md",
+    "campaign_bundle.py",
+    "bundle_operation_protocol.py",
+    "bundle_issue_runner.py",
+    ".github/workflows/xads-bundle-operation.yml",
+    "reporting_dashboard.py",
     "docs/X_INTEGRATION_REVIEW_PACKET.md",
     "docs/X_REVIEW_SUBMISSION_MESSAGE.md",
+    "docs/X_APPROVAL_ACTION.md",
     "docs/CUSTOMER_ONBOARDING.md",
     "docs/OFFBOARDING.md",
     "docs/PRICING_AND_BILLING.md",
     "docs/PRIVACY_SECURITY_BASELINE.md",
+    "docs/REPORTING_REQUIREMENTS.md",
+    "docs/CREATION_BETA_CONTRACT.md",
     "docs/SELLABLE_BETA_SCOPE.md",
+    "docs/PRE_SALE_CHECKLIST.md",
 )
 
 
@@ -36,7 +45,11 @@ def evaluate(root: Path | None = None) -> dict[str, object]:
     missing = [path for path in REQUIRED_FILES if not (root / path).exists()]
 
     gates = [
-        Gate("required_files", not missing, "missing: " + ", ".join(missing) if missing else "ok"),
+        Gate(
+            "technical_and_documentation_p0",
+            not missing,
+            "missing: " + ", ".join(missing) if missing else "ok",
+        ),
         Gate(
             "x_integration_approved",
             _env_true("XADS_X_INTEGRATION_APPROVED"),
@@ -53,7 +66,7 @@ def evaluate(root: Path | None = None) -> dict[str, object]:
         "sellable": sellable,
         "status": "GO" if sellable else "NO_GO",
         "gates": [asdict(gate) for gate in gates],
-        "rule": "SELLABLE = X_INTEGRATION_APPROVED && EXTERNAL_E2E_ACCEPTANCE_PASSED",
+        "rule": "SELLABLE = TECHNICAL_P0 && X_INTEGRATION_APPROVED && EXTERNAL_E2E_ACCEPTANCE_PASSED",
     }
 
 
