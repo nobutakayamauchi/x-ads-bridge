@@ -53,7 +53,7 @@ def collection_plan(query: str, *, max_results: int = DEFAULT_MAX_RESULTS) -> di
         "configured_cost_cap_usd": str(configured_cap),
         "within_cost_cap": estimated <= configured_cap,
         "paid_reads_enabled": os.getenv("X_SIGNAL_ALLOW_PAID_READS", "").strip().lower() == "true",
-        "privacy_mode": "no user profile lookup; post text/created_at/lang/public_metrics only",
+        "privacy_mode": "no user profile lookup; post text/created_at/lang/public_metrics/conversation identity only",
     }
 
 
@@ -79,7 +79,7 @@ def search_recent_posts(
     params: dict[str, Any] = {
         "query": query,
         "max_results": max_results,
-        "tweet.fields": "created_at,lang,public_metrics",
+        "tweet.fields": "created_at,lang,public_metrics,conversation_id,referenced_tweets",
     }
     if start_time:
         params["start_time"] = start_time
@@ -106,6 +106,8 @@ def search_recent_posts(
         rows.append({
             "source_kind": "x_recent_search",
             "source_id": str(post.get("id") or ""),
+            "conversation_id": str(post.get("conversation_id") or ""),
+            "referenced_tweets": post.get("referenced_tweets") or [],
             "text": str(post.get("text") or ""),
             "created_at": post.get("created_at"),
             "lang": post.get("lang"),
@@ -117,5 +119,5 @@ def search_recent_posts(
         "result_count": len(rows),
         "signals": rows,
         "next_token": (payload.get("meta") or {}).get("next_token"),
-        "note": "returned posts are raw candidate signals; run them through evolution_engine.inspect_external_signal before use",
+        "note": "returned posts are raw candidate signals; inspect hypothesis fit and Intent/Test/Outcome completeness before use",
     }
