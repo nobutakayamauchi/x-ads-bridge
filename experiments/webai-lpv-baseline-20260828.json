@@ -1,6 +1,6 @@
 {
   "experiment_id": "WAB-EXP-LPV-20260828",
-  "purpose": "Test whether the previous WebAI Bridge campaign underperformed because X optimized for link clicks without a verified website signal.",
+  "purpose": "Test whether the previous WebAI Bridge campaign underperformed because X optimized for link clicks rather than completed site visits.",
   "prior_control": {
     "campaign_id": "p5vot",
     "campaign_name": "WebAI Bridge LP Test 5000",
@@ -12,34 +12,38 @@
     "bid_strategy": "AUTO",
     "daily_budget_jpy": 1700,
     "total_budget_jpy": 5000,
-    "observed": {
-      "impressions": 23821,
-      "link_clicks": 102,
-      "ctr": 0.00428,
-      "cpc_jpy_approx": 34.9,
-      "cpm_jpy_approx": 149
+    "latest_observed_20260828": {
+      "impressions": 31777,
+      "link_clicks": 133,
+      "billed_spend_jpy": 4607.206686,
+      "remaining_to_cap_jpy_approx": 392.793314,
+      "conversion_landing_page_views_since_tracking_started": 3
     }
   },
   "new_baseline": {
     "campaign_name": "WAB_20260828_LPV_BASELINE",
-    "ad_group_name": "WAB_B2_LPV_CURRENT_TARGET",
-    "objective_ui": "Website traffic",
-    "optimization": "Website traffic / landing-page visit",
-    "key_conversion": {
+    "ad_group_name": "WAB_B2_SITE_VISITS_CURRENT_TARGET",
+    "objective": "WEBSITE_CLICKS",
+    "goal": "SITE_VISITS",
+    "pay_by": "IMPRESSION",
+    "measurement_events": {
       "pixel_id": "reoqz",
-      "event_id": "140u8k",
-      "event_name": "Landing page views",
-      "event_type": "LANDING_PAGE_VIEW"
+      "landing_page_view_event_id": "140u8k",
+      "landing_page_view_status": "TRACKING",
+      "site_visit_event_id": "140u8l",
+      "site_visit_status": "TRACKING"
     },
+    "primary_web_event_tag": null,
+    "primary_web_event_tag_note": "Intentionally omitted. X Ads API requires primary_web_event_tag for WEBSITE_CONVERSIONS, not SITE_VISITS. Keep H1 to a single optimization-goal change.",
     "bid_strategy": "AUTO",
     "daily_budget_jpy": 1700,
     "diagnostic_spend_cap_jpy": 2500,
     "placements": ["ALL_ON_TWITTER"],
-    "creative": "Keep existing B2 creative unchanged",
-    "landing_page": "Keep current WebAI Bridge LP content unchanged; X Pixel base code is now installed",
-    "destination_url": "https://ultimatefire.jp/webai-bridge/?utm_source=x&utm_medium=paid&utm_campaign=wab_20260828_lpv_baseline&utm_content=b2_current_target",
+    "creative": "Keep existing B2 promoted Tweet unchanged",
+    "landing_page": "Keep current WebAI Bridge LP content unchanged; X Pixel base code is installed and LPV/Site Visit events are TRACKING",
+    "destination_url": "Keep the same B2 Tweet destination for causal isolation; use first-party campaign IDs/UTM only if this does not require changing the promoted Tweet creative.",
     "targeting": {
-      "location": ["Japan"],
+      "location": [{"name": "Japan", "targeting_type": "LOCATION", "targeting_value": "06ef846bfc783874", "operator_type": "EQ"}],
       "broad_keywords": [
         "GPTs",
         "GPTs 販売",
@@ -64,19 +68,21 @@
       ]
     }
   },
-  "preflight_gate": [
-    "Do not launch while the Landing Page View event is UNVERIFIED / has no observed activity.",
-    "Open the deployed landing page in a real browser and confirm the X Pixel fires, preferably with X Pixel Helper or Events Manager.",
-    "Pause the old WAB_LP_TEST_B2 line item before launching the new baseline so campaigns do not compete or continue spending in parallel."
-  ],
+  "preflight_gate": {
+    "pixel": "PASSED: Landing page views 140u8k and Site visits 140u8l are TRACKING",
+    "control_completion": "WAITING: do not activate new baseline until old xhwda reaches its ¥5,000 cap or finishes",
+    "overlap": "Old xhwda must be PAUSED/finished before new line item activation",
+    "creation_mode": "New campaign/line item may be created PAUSED before control completion"
+  },
   "fixed_variables": [
-    "B2 creative",
+    "B2 promoted Tweet creative",
     "visible LP content",
-    "Japan + existing 20 BROAD_KEYWORD targeting criteria",
+    "Japan + exact existing 20 BROAD_KEYWORD targeting criteria",
     "AUTO bid",
-    "X placements"
+    "ALL_ON_TWITTER placement",
+    "WEBSITE_CLICKS objective"
   ],
-  "changed_variable": "Optimization/measurement signal: LINK_CLICKS with no primary event -> verified Landing Page View website signal",
+  "changed_variable": "Optimization goal only: LINK_CLICKS -> SITE_VISITS",
   "measurement": [
     "spend",
     "impressions",
@@ -85,6 +91,7 @@
     "CTR",
     "CPC",
     "landing_page_views",
+    "site_visits",
     "link_click_to_lpv_rate",
     "cost_per_lpv",
     "consult_clicks from first-party funnel tracker",
@@ -95,5 +102,5 @@
     "hard_spend_cap_jpy": 2500,
     "note": "20 LPVs is a directional checkpoint, not a statistical-significance claim. Stop at the spend cap if not reached."
   },
-  "phase_2_only_after_phase_1": "If LPV tracking works, test targeting separately. Do not change targeting during this baseline because the old 20 BROAD_KEYWORD criteria are OR-combined, not a 20-way AND filter."
+  "phase_2_only_after_phase_1": "If SITE_VISITS optimization works, test targeting separately. Do not change targeting during H1."
 }
