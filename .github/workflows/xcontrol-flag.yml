@@ -1,0 +1,57 @@
+name: X Ads Control Flag
+
+on:
+  issues:
+    types: [opened, reopened]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: xcontrol-issue-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: >-
+      github.event.issue.user.login == github.repository_owner &&
+      startsWith(github.event.issue.title, '[xcontrol]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Read control status
+        id: control
+        continue-on-error: true
+        env:
+          XADS_CONSUMER_KEY: ${{ secrets.XADS_CONSUMER_KEY }}
+          XADS_CONSUMER_SECRET: ${{ secrets.XADS_CONSUMER_SECRET }}
+          XADS_ACCESS_TOKEN: ${{ secrets.XADS_ACCESS_TOKEN }}
+          XADS_ACCESS_TOKEN_SECRET: ${{ secrets.XADS_ACCESS_TOKEN_SECRET }}
+          XADS_ACCOUNT_ID: ${{ secrets.XADS_ACCOUNT_ID }}
+          XADS_API_VERSION: '12'
+        run: python control_flag_issue_runner.py
+
+      - name: Post flag to issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: gh issue comment "$ISSUE_NUMBER" --body-file result.md
+
+      - name: Mark workflow failed when check failed
+        if: steps.control.outcome == 'failure'
+        run: exit 1
