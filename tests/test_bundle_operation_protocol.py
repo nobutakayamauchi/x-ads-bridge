@@ -17,6 +17,7 @@ PROPOSED_CREATE = {
     "daily_budget_jpy": 1000,
     "total_budget_jpy": 2000,
     "goal": "SITE_VISITS",
+    "conversion_tag_id": "tag1",
     "tweet_ids": ["123456"],
     "targeting": [
         {
@@ -107,6 +108,7 @@ class BundleOperationProtocolTests(unittest.TestCase):
                 return {"data": {"id": "camp1"}}
             if method == "POST" and path.endswith("/line_items"):
                 self.assertEqual(kwargs["data"]["entity_status"], "PAUSED")
+                self.assertEqual(kwargs["data"]["conversion_tag_id"], "tag1")
                 return {"data": {"id": "li1"}}
             if method == "POST" and path.endswith("/targeting_criteria"):
                 return {"data": {"id": "tc1"}}
