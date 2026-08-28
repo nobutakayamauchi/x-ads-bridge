@@ -1,0 +1,121 @@
+{
+  "hypothesis_id": "H1-LPV-VS-LINK-CLICK",
+  "collected_at": "2026-08-28T09:40:00+09:00",
+  "purpose": "Add source diversity and near-case funnel benchmarks without promoting indirect evidence to direct H1 proof.",
+  "cases": [
+    {
+      "case_id": "H1-EXT-YAHOO-SHOPPING-EWJ",
+      "source_refs": ["https://www.exchangewire.jp/2022/04/26/event-twitter-performance/"],
+      "source_kind": "third_party_industry_report",
+      "source_family": "industry_press",
+      "h1_evidence_class": "DIRECT",
+      "direction": "SUPPORTS_H1",
+      "intent": {
+        "objective": "new_customer_acquisition",
+        "target_or_problem": "Acquire new Yahoo! Shopping customers by driving X users to an interactive lottery site.",
+        "evidence": "The report states that Yahoo! Shopping used the campaign for new-customer acquisition and traffic to the lottery site."
+      },
+      "test": {
+        "changed_dimension": "optimization_event",
+        "before_or_control": "Link Click optimization and Conversion optimization",
+        "after_or_challenge": "Site Visits Optimization",
+        "held_constant": "not fully disclosed",
+        "budget_or_window": "not disclosed",
+        "evidence": "The report says three campaigns were prepared to compare Link Click, Conversion, and Site Visits optimization."
+      },
+      "outcome": {
+        "metrics": {
+          "cost_per_site_visit_reduction_vs_link_click_pct": 17,
+          "cost_per_site_visit_reduction_vs_conversion_pct": 15,
+          "cost_per_conversion_reduction_vs_conversion_optimization_pct": 14
+        },
+        "direction": "improved",
+        "evidence": "ExchangeWire Japan reports 17% lower cost per site visit versus Link Click, 15% lower versus Conversion, and roughly 14% lower cost per conversion versus Conversion optimization."
+      },
+      "verification": {
+        "source_type": "third_party_industry_press_reporting_platform_event",
+        "self_reported": false,
+        "numeric_consistency": "not_checkable_without_absolute_values",
+        "cross_source_corroboration": "not_checked",
+        "case_class": "CASE_READY_VERIFIED",
+        "bias_flags": ["platform_event_source_dependency", "absolute_budget_not_disclosed"],
+        "evidence_strength": 0.72
+      },
+      "product_fit": {
+        "score": 0.58,
+        "near_case": false,
+        "reasons": ["Japan", "direct Link Click comparison", "conversion outcome", "large EC brand", "different offer and scale"]
+      },
+      "scale_authority": false
+    },
+    {
+      "case_id": "H1-BENCH-ZENN-NEW-SERVICE-LP-20260505",
+      "source_refs": ["https://zenn.dev/xxishan/articles/8333bfdc329130"],
+      "source_kind": "independent_operator_article",
+      "source_family": "independent_operator",
+      "h1_evidence_class": "INDIRECT",
+      "direction": "BENCHMARK_ONLY",
+      "intent": {
+        "objective": "prelaunch_demand_validation",
+        "target_or_problem": "Validate demand for a new service through an LP before building the full product.",
+        "evidence": "The author explicitly describes a sell-before-you-build approach and puts email preregistration CTAs on the LP."
+      },
+      "test": {
+        "changed_dimension": "traffic_acquisition_via_x_ads",
+        "before_or_control": "No comparable Link Click-vs-LPV optimization control disclosed",
+        "after_or_challenge": "Website traffic campaign to the new-service LP with GA tracking",
+        "held_constant": "not applicable for H1 direct comparison",
+        "budget_or_window": "about one day of delivery across two calendar days; spend JPY 5,467.89",
+        "evidence": "The author used X Ads to send traffic to the LP and independently measured users with Google Analytics."
+      },
+      "outcome": {
+        "metrics": {
+          "impressions": 96281,
+          "spend_jpy": 5467.89,
+          "link_clicks": 597,
+          "ctr_pct": 0.62,
+          "cpc_jpy": 9.16,
+          "cpm_jpy": 56.8,
+          "ga_active_users": 562,
+          "email_registrations": 15,
+          "lp_to_registration_cvr_pct": 2.67,
+          "cost_per_registration_jpy": 365,
+          "derived_click_to_active_user_rate_pct": 94.14
+        },
+        "direction": "benchmark",
+        "evidence": "The article reports X Ads metrics plus GA active users and email registrations. Click-to-active-user rate is derived as 562/597 = 94.14%."
+      },
+      "verification": {
+        "source_type": "independent_operator_article_with_ads_and_ga_metrics",
+        "self_reported": true,
+        "numeric_consistency": "pass_for_reported_and_derived_ratios",
+        "cross_source_corroboration": "not_checked",
+        "case_class": "CASE_READY_SELF_REPORTED",
+        "bias_flags": ["organic_amplification_present", "single_operator_self_report"],
+        "evidence_strength": 0.78
+      },
+      "product_fit": {
+        "score": 0.88,
+        "near_case": true,
+        "reasons": [
+          "Japan",
+          "individual developer",
+          "new digital service",
+          "small budget around JPY 5,000",
+          "X to LP",
+          "intermediate lead event",
+          "recent 2026 case",
+          "offer/ticket differs from WebAI Bridge"
+        ]
+      },
+      "benchmark_use": {
+        "click_to_lpv_reference_pct": 94.14,
+        "recommended_floor_for_webai_test_pct": 80,
+        "lp_to_intermediate_conversion_reference_pct": 2.67,
+        "warning": "Do not use this case as evidence that LPV optimization beats Link Click; the optimization modes were not directly compared."
+      },
+      "scale_authority": false
+    }
+  ],
+  "invariant": "Direct hypothesis evidence and near-case funnel benchmarks are stored separately. INDIRECT benchmark cases may set measurement expectations but cannot be counted as DIRECT support for H1."
+}
