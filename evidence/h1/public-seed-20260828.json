@@ -1,0 +1,232 @@
+{
+  "hypothesis_id": "H1-LPV-VS-LINK-CLICK",
+  "statement": "For WebAI Bridge, optimizing X Website Traffic for Site Visit/Landing Page View produces higher-quality website traffic than optimizing for Link Clicks.",
+  "collected_at": "2026-08-28T09:30:00+09:00",
+  "collection_context": {
+    "x_api_attempt_issue": 38,
+    "x_api_attempt_result": "BLOCKED_CREDITS_DEPLETED",
+    "x_api_evidence_stored": false,
+    "fallback": "purposeful public-web retrieval using the same H1, prioritizing X official comparison cases"
+  },
+  "cases": [
+    {
+      "case_id": "H1-EXT-SEPTENI-ENJAPAN",
+      "source_refs": [
+        "https://marketing.x.com/ja/success-stories/certified-agency-septeni"
+      ],
+      "source_kind": "official_x_case",
+      "h1_evidence_class": "DIRECT",
+      "direction": "SUPPORTS_H1",
+      "intent": {
+        "objective": "conversion_acquisition_efficiency",
+        "target_or_problem": "Improve acquisition efficiency for en-japan's Web direct-response campaign (Middle no Tenshoku).",
+        "evidence": "The case states that the advertiser had used conversion optimization and introduced Site Visits Optimization to acquire users more efficiently."
+      },
+      "test": {
+        "changed_dimension": "optimization_event",
+        "before_or_control": "Conversion optimization and Link Click optimization",
+        "after_or_challenge": "Site Visits Optimization / landing-page arrival event",
+        "held_constant": "not fully disclosed",
+        "budget_or_window": "several months of agency research; absolute spend not disclosed",
+        "evidence": "Septeni reports evaluating Site Visits Optimization against existing optimization products and refining tag/event implementation."
+      },
+      "outcome": {
+        "metrics": {
+          "cpa_improvement_vs_conversion_optimization_pct": 40,
+          "cpa_improvement_vs_link_click_optimization_pct": 50
+        },
+        "direction": "improved",
+        "evidence": "The published case reports roughly 40% CPA improvement versus conversion optimization and roughly 50% versus Link Click optimization."
+      },
+      "verification": {
+        "source_type": "official_x_case_with_operator_interview",
+        "self_reported": false,
+        "numeric_consistency": "not_checkable_without_absolute_values",
+        "cross_source_corroboration": "not_checked",
+        "case_class": "CASE_READY_VERIFIED",
+        "bias_flags": [
+          "platform_success_story_selection_bias",
+          "product_launch_period",
+          "absolute_budget_not_disclosed"
+        ],
+        "evidence_strength": 0.82
+      },
+      "product_fit": {
+        "score": 0.72,
+        "near_case": true,
+        "reasons": [
+          "Japan",
+          "Web direct-response campaign",
+          "conversion KPI",
+          "direct comparison with Link Click optimization",
+          "different product category and likely larger operating scale"
+        ]
+      },
+      "scale_authority": false
+    },
+    {
+      "case_id": "H1-EXT-SAP-CONCUR",
+      "source_refs": [
+        "https://marketing.x.com/ja/success-stories/how-sap-concur-drove-website-traffic-visits-from-twitter"
+      ],
+      "source_kind": "official_x_case",
+      "h1_evidence_class": "DIRECT",
+      "direction": "SUPPORTS_H1",
+      "intent": {
+        "objective": "qualified_website_traffic",
+        "target_or_problem": "Drive business audiences from X ads to SAP Concur whitepaper content and improve the efficiency of website visits.",
+        "evidence": "The case frames the opportunity as moving interested business audiences from X advertising to Concur.com content."
+      },
+      "test": {
+        "changed_dimension": "optimization_event",
+        "before_or_control": "Link Click optimization and Conversion optimization",
+        "after_or_challenge": "Site Visits Optimization",
+        "held_constant": "not fully disclosed",
+        "budget_or_window": "X-funded advertiser testing during Nov-Dec 2021; absolute spend not disclosed",
+        "evidence": "The success story explicitly compares Site Visits Optimization with Link Click and Conversion optimization."
+      },
+      "outcome": {
+        "metrics": {
+          "cost_per_site_visit_reduction_vs_link_click_pct": 88,
+          "cost_per_site_visit_reduction_vs_conversion_pct": 9,
+          "on_site_asset_consumption_lift_vs_conversion_objective_pct": 11
+        },
+        "direction": "improved",
+        "evidence": "The published case reports 88% lower cost per site visit versus Link Click optimization and 9% lower versus Conversion optimization."
+      },
+      "verification": {
+        "source_type": "official_x_case",
+        "self_reported": false,
+        "numeric_consistency": "not_checkable_without_absolute_values",
+        "cross_source_corroboration": "not_checked",
+        "case_class": "CASE_READY_VERIFIED",
+        "bias_flags": [
+          "x_funded_advertiser_test",
+          "platform_success_story_selection_bias",
+          "2021_2022_product_launch_period"
+        ],
+        "evidence_strength": 0.8
+      },
+      "product_fit": {
+        "score": 0.68,
+        "near_case": true,
+        "reasons": [
+          "B2B software",
+          "website content funnel",
+          "direct Link Click comparison",
+          "US rather than Japan",
+          "large established brand"
+        ]
+      },
+      "scale_authority": false
+    },
+    {
+      "case_id": "H1-EXT-BLOOMBERG",
+      "source_refs": [
+        "https://marketing.x.com/ja/success-stories/how-bloomberg-drove-site-visits-with-twitter-site-visit-optimization-tool"
+      ],
+      "source_kind": "official_x_case",
+      "h1_evidence_class": "DIRECT",
+      "direction": "SUPPORTS_H1",
+      "intent": {
+        "objective": "qualified_website_traffic",
+        "target_or_problem": "Increase visits and interactions on Bloomberg.com from the existing X audience.",
+        "evidence": "Bloomberg set the goal of increasing website visits and driving traffic to feature articles."
+      },
+      "test": {
+        "changed_dimension": "optimization_event",
+        "before_or_control": "Link Click optimization and Conversion optimization",
+        "after_or_challenge": "Site Visits Optimization",
+        "held_constant": "not fully disclosed",
+        "budget_or_window": "X-funded advertiser testing during Nov-Dec 2021; absolute spend not disclosed",
+        "evidence": "The published case explicitly reports Site Visits Optimization results against Link Click and Conversion optimization."
+      },
+      "outcome": {
+        "metrics": {
+          "cost_per_site_visit_reduction_vs_link_click_pct": 87,
+          "cost_per_site_visit_reduction_vs_conversion_pct": 52
+        },
+        "direction": "improved",
+        "evidence": "The published case reports 87% lower cost per site visit versus Link Click optimization and 52% lower versus Conversion optimization."
+      },
+      "verification": {
+        "source_type": "official_x_case",
+        "self_reported": false,
+        "numeric_consistency": "not_checkable_without_absolute_values",
+        "cross_source_corroboration": "not_checked",
+        "case_class": "CASE_READY_VERIFIED",
+        "bias_flags": [
+          "x_funded_advertiser_test",
+          "platform_success_story_selection_bias",
+          "2021_2022_product_launch_period"
+        ],
+        "evidence_strength": 0.78
+      },
+      "product_fit": {
+        "score": 0.55,
+        "near_case": false,
+        "reasons": [
+          "website traffic objective",
+          "direct Link Click comparison",
+          "media content rather than paid AI/IT service",
+          "US global enterprise scale"
+        ]
+      },
+      "scale_authority": false
+    },
+    {
+      "case_id": "H1-EXT-X-PRODUCT-TEST-15",
+      "source_refs": [
+        "https://business.x.com/ja/resources/jp-product-update"
+      ],
+      "source_kind": "official_x_product_test",
+      "h1_evidence_class": "DIRECT",
+      "direction": "SUPPORTS_H1",
+      "intent": {
+        "objective": "validate_site_visits_optimization",
+        "target_or_problem": "Evaluate whether Site Visits Optimization can acquire completed website visits more efficiently than existing optimization models.",
+        "evidence": "X describes the product as optimizing delivery toward people most likely to visit the website."
+      },
+      "test": {
+        "changed_dimension": "optimization_event",
+        "before_or_control": "Link Click optimization and Conversion optimization",
+        "after_or_challenge": "Site Visits Optimization",
+        "held_constant": "aggregate advertiser test details not fully disclosed",
+        "budget_or_window": "15-advertiser/product-test aggregate; absolute spend not disclosed",
+        "evidence": "X reports product-test comparisons against existing optimization methods."
+      },
+      "outcome": {
+        "metrics": {
+          "avg_cost_per_site_visit_reduction_vs_link_click_pct": 67,
+          "avg_cost_per_site_visit_reduction_vs_conversion_pct": 31
+        },
+        "direction": "improved",
+        "evidence": "X reports average cost per site visit 67% lower than Link Click optimization and 31% lower than Conversion optimization."
+      },
+      "verification": {
+        "source_type": "official_x_product_test",
+        "self_reported": false,
+        "numeric_consistency": "aggregate_only",
+        "cross_source_corroboration": "partially_reflected_in_official_case_studies",
+        "case_class": "CASE_READY_VERIFIED",
+        "bias_flags": [
+          "platform_product_test",
+          "product_launch_period",
+          "participant_and_budget_details_not_disclosed"
+        ],
+        "evidence_strength": 0.88
+      },
+      "product_fit": {
+        "score": 0.45,
+        "near_case": false,
+        "reasons": [
+          "direct optimization comparison",
+          "aggregate cross-advertiser benchmark",
+          "not specific to Japan small-budget high-ticket AI service"
+        ]
+      },
+      "scale_authority": false
+    }
+  ],
+  "invariant": "External evidence sets hypothesis priority only. WebAI Bridge's own bounded campaign and authoritative LP/conversion evidence decide confirmation, refutation, and SCALE."
+}
